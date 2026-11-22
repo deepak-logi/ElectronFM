@@ -24,7 +24,9 @@ export default [
     },
     rules: {
       ...eslintPluginReactHooks.configs.recommended.rules,
-      ...eslintPluginReactRefresh.configs.vite.rules
+      ...eslintPluginReactRefresh.configs.vite.rules,
+      // This is a plain-JS project (no TypeScript), so we don't use PropTypes.
+      'react/prop-types': 'off'
     }
   },
   eslintConfigPrettier

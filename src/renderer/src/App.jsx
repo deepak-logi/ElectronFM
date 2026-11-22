@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react'
 import Toolbar from './components/Toolbar'
 import FileList from './components/FileList'
 import DetailsPanel from './components/DetailsPanel'
@@ -8,7 +8,7 @@ export default function App() {
   const [parentPath, setParentPath] = useState(null)
   const [history, setHistory] = useState([])
   const [items, setItems] = useState([])
-  const [selected, setSelected] = useState([])
+  const [selected, setSelected] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -18,30 +18,37 @@ export default function App() {
   }, [])
 
   // Loading folder content whenever path changes
+  /* eslint-disable react-hooks/set-state-in-effect -- fetching on path change is a legitimate effect; the cleanup below ignores stale responses */
   useEffect(() => {
-    if(!currentPath) return
+    if (!currentPath) return
     let cancelled = false
     setLoading(true)
     setError('')
     setSelected(null)
 
-    window.fileApi.readDir(currentPath).then((result) => {
-      if(cancelled) return
-      setItems(result.items)
-      setParentPath(result.parent)
-    }).catch((err) => !cancelled && setError(err.message)).finally(() => !cancelled && setLoading(false))
+    window.fileApi
+      .readDir(currentPath)
+      .then((result) => {
+        if (cancelled) return
+        setItems(result.items)
+        setParentPath(result.parent)
+      })
+      .catch((err) => !cancelled && setError(err.message))
+      .finally(() => !cancelled && setLoading(false))
 
-    return () => {cancelled = true} // Ignoring results from outdated requests
+    return () => {
+      cancelled = true
+    } // Ignoring results from outdated requests
   }, [currentPath])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-
-  function navigateTo(newPath){
+  function navigateTo(newPath) {
     setHistory((prev) => [...prev, currentPath])
     setCurrentPath(newPath)
   }
 
   function goBack() {
-    if(history.length === 0) return
+    if (history.length === 0) return
     setCurrentPath(history[history.length - 1])
     setHistory((prev) => prev.slice(0, -1))
   }
@@ -58,7 +65,7 @@ export default function App() {
         canGoBack={history.length > 0}
         canGoUp={Boolean(parentPath)}
         onBack={goBack}
-        onUp={() => navigateTo(parentPath)} 
+        onUp={() => parentPath && navigateTo(parentPath)}
       />
 
       <main className="content">
