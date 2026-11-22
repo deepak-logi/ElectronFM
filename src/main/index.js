@@ -2,6 +2,51 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import path from 'node:path'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+
+ipcMain.handle('fs:getHomeDir', () => os.homedir())
+
+ipcMain.handle('fs:readDir', async (_event, dirPath) => {
+  if (typeof dirPath !== 'string' || !path.isAbsolute(dirPath)) {
+    throw new Error('Invalid folder path')
+  }
+
+  const entries = await fs.readdir(dirPath, { withFileTypes: true })
+
+  const items = await Promise.all(
+    entries.map(async (entry) => {
+      const fullPath = path.join(dirPath, entry.name)
+      try {
+        const stats = await fs.stat(fullPath)
+        return {
+          name: entry.name,
+          path: fullPath,
+          isDirectory: entry.isDirectory(),
+          size: stats.size,
+          modified: stats.mtimeMs,
+          extension: path.extname(entry.name).toLowerCase()
+        }
+      } catch {
+        return null // Skip files we can't read
+      }
+    })
+  )
+
+  const sorted = items
+    .filter(Boolean)
+    .sort((a, b) => b.isDirectory - a.isDirectory || a.name.localeCompare(b.name))
+
+  const parent = path.dirname(dirPath)
+  return { path: dirPath, parent: parent !== dirPath ? parent : null, items: sorted }
+})
+
+ipcMain.handle('shell:openPath', async (_event, filePath) => {
+  if (typeof filePath !== 'string') throw new Error('Invalid file path')
+  const errorMessage = await shell.openPath(filePath)
+  if (errorMessage) throw new Error(errorMessage)
+})
 
 function createWindow() {
   // Create the browser window.
