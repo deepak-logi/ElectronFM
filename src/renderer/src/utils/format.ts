@@ -1,4 +1,4 @@
-export function formatSize(bytes) {
+export function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
 
   const units = ['KB', 'MB', 'GB', 'TB']
@@ -14,6 +14,6 @@ export function formatSize(bytes) {
   return `${value.toFixed(1)} ${units[unit]}`
 }
 
-export function formatDate(ms) {
+export function formatDate(ms: string) {
   return new Date(ms).toLocaleString()
 }

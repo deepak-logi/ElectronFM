@@ -1,3 +1,4 @@
+import { FileEntry } from '../../../shared/types'
 import FileItem from './FileItem'
 
 export default function FileList({ items, selected, onSelect, onOpen }) {
@@ -5,7 +6,7 @@ export default function FileList({ items, selected, onSelect, onOpen }) {
 
   return (
     <ul className="file-list">
-      {items.map((item) => (
+      {items.map((item: FileEntry) => (
         <FileItem
           key={item.path}
           item={item}
