@@ -2,7 +2,11 @@
 
 A small desktop file manager built with Electron and React. It browses the local file system, shows folder contents, and opens files with their default application.
 
+### Main window
+
 ![File Manager main window](docs/screenshots/main-window.png)
+
+### Navigation along with file details
 
 ![Navigation along with file details](docs/screenshots/navigation.png)
 
