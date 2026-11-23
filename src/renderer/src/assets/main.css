@@ -1,11 +1,11 @@
 @import './base.css';
 
 body {
-  display: flex;
+  display: block;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background-image: url('./wavy-lines.svg');
+  background-image: url('none');
   background-size: cover;
   user-select: none;
 }
@@ -31,7 +31,8 @@ code {
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  margin-bottom: 80px;
+  height: 100%;
+  margin-bottom: 0;
 }
 
 .logo {
@@ -162,10 +163,71 @@ code {
   }
 }
 
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ev-c-gray-3);
+  flex-shrink: 0;
+}
+
+.content {
+  display: flex;
+  flex: 1; /* fills the space under the toolbar */
+  min-height: 0;
+  overflow: hidden;
+}
+
+.file-list {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto; /* ← the scrollbar */
+  margin: 0;
+  padding: 8px 0;
+}
+
+.details-panel {
+  width: 280px;
+  flex-shrink: 0;
+  overflow-y: auto; /* details scroll independently */
+  padding: 16px;
+  border-left: 1px solid var(--ev-c-gray-3);
+}
+
 .toolbar-path {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.file-list {
+  scrollbar-width: thin; /* Firefox + modern Chromium */
+  scrollbar-color: var(--ev-c-gray-2) transparent;
+  scrollbar-gutter: stable; /* prevents width jump when it appears */
+}
+
+.file-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.file-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.file-list::-webkit-scrollbar-thumb {
+  background: var(--ev-c-gray-2);
+  border-radius: 5px;
+}
+
+.file-list::-webkit-scrollbar-thumb:hover {
+  background: var(--ev-c-gray-1);
 }
