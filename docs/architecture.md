@@ -19,7 +19,7 @@ The key rule: **the renderer never touches `fs` or `path`.** Everything that nee
 `src/main/index.js` does three jobs:
 
 1. **App lifecycle** — `app.whenReady()`, window creation, macOS `activate`, and `window-all-closed`.
-2. **File system access** — the `fs:readDir` handler reads a folder and returns plain JSON-safe data.
+2. **File system access** — `fs:getHomeDir` returns the user's home folder, and `fs:readDir` reads a folder and returns plain JSON-safe data.
 3. **Shell integration** — `shell:openPath` hands a file to the operating system, which opens it with the default application for that file type.
 
 It also keeps the existing electron-vite behaviour: load the dev server URL in development, or the built `index.html` in production.
@@ -52,9 +52,9 @@ The renderer is a normal React app:
 | ---------------- | --------------- | -------------------- | ---------------------------- |
 | `fs:getHomeDir`  | Renderer → Main | none                 | The user's home folder path  |
 | `fs:readDir`     | Renderer → Main | Absolute folder path | `{ path, parent, items }`    |
-| `shell:openPath` | Renderer → Main | File path            | Nothing, or an error message |
+| `shell:openPath` | Renderer → Main | Absolute file path   | Nothing, or an error message |
 
-`fs:readDir` rejects with `Invalid folder path` if the argument is not a string or is not absolute. `shell:openPath` rejects if the OS returns an error message (for example, no application is associated with the file).
+`fs:readDir` rejects with `Invalid folder path` if the argument is not a string or is not absolute. `shell:openPath` rejects with `Invalid file path` for the same checks, or with the OS error message if the file cannot be opened (for example, no application is associated with the file).
 
 ## The item data shape
 
@@ -80,7 +80,7 @@ Entries are sorted with **folders first**, then by name using `localeCompare`. E
 5. The preload calls `ipcRenderer.invoke('fs:readDir', currentPath)`.
 6. The main process validates the path, runs `fs.readdir(..., { withFileTypes: true })`, calls `fs.stat` for each entry, sorts the results, computes the parent path, and returns `{ path, parent, items }`.
 7. Back in React, `setItems(result.items)` and `setParentPath(result.parent)` update the UI, and `loading` becomes `false`.
-8. `FileList` re-renders the new items. `DetailsPanel` receives `null` and shows its empty state.
+8. `FileList` re-renders the new items. `DetailsPanel` continues to show its empty state, because selection was already cleared in step 4.
 
 If the user navigates again before the first request finishes, the cleanup function sets `cancelled = true`, so the stale response is ignored. This prevents an older, slower folder from overwriting a newer one.
 

@@ -43,7 +43,9 @@ ipcMain.handle('fs:readDir', async (_event, dirPath) => {
 })
 
 ipcMain.handle('shell:openPath', async (_event, filePath) => {
-  if (typeof filePath !== 'string') throw new Error('Invalid file path')
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) {
+    throw new Error('Invalid file path')
+  }
   const errorMessage = await shell.openPath(filePath)
   if (errorMessage) throw new Error(errorMessage)
 })
