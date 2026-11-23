@@ -19,11 +19,11 @@ ipcMain.handle('fs:readDir', async (_event, dirPath) => {
     entries.map(async (entry) => {
       const fullPath = path.join(dirPath, entry.name)
       try {
-        const stats = await fs.stat(fullPath)
+        const stats = await fs.stat(fullPath) // follows symlinks
         return {
           name: entry.name,
           path: fullPath,
-          isDirectory: entry.isDirectory(),
+          isDirectory: stats.isDirectory(),
           size: stats.size,
           modified: stats.mtimeMs,
           extension: path.extname(entry.name).toLowerCase()
