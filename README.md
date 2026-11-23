@@ -36,12 +36,13 @@ A small desktop file manager built with Electron and React. It browses the local
 
 | Layer         | Technology                                            |
 | ------------- | ----------------------------------------------------- |
+| Language      | TypeScript 5.9 (strict), ES modules                   |
 | Desktop shell | Electron 44                                           |
 | Main process  | Node.js `fs/promises`, `path`, `os`, `electron.shell` |
 | Secure bridge | Preload script + `contextBridge`                      |
 | UI            | React 19 + Vite 8                                     |
 | Build tooling | electron-vite 6, electron-builder 26                  |
-| Code quality  | ESLint 9, Prettier 3                                  |
+| Code quality  | ESLint 9 (+ `typescript-eslint`), Prettier 3          |
 
 ## Getting started
 
@@ -68,17 +69,20 @@ This starts electron-vite, opens the app window, and enables hot reload for the 
 
 ### Other scripts
 
-| Command                | Description                                     |
-| ---------------------- | ----------------------------------------------- |
-| `npm run dev`          | Run the app in development with HMR             |
-| `npm run lint`         | Run ESLint                                      |
-| `npm run format`       | Format all files with Prettier                  |
-| `npm run build`        | Compile main, preload, and renderer into `out/` |
-| `npm run start`        | Preview the compiled app from `out/`            |
-| `npm run build:unpack` | Package an unpacked app into `dist/`            |
-| `npm run build:mac`    | Build a macOS installer (`.dmg`)                |
-| `npm run build:win`    | Build a Windows installer                       |
-| `npm run build:linux`  | Build Linux packages (AppImage, snap, deb)      |
+| Command                  | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `npm run dev`            | Run the app in development with HMR             |
+| `npm run lint`           | Run ESLint (including TypeScript rules)         |
+| `npm run typecheck`      | Type-check main/preload **and** the renderer    |
+| `npm run typecheck:node` | Type-check only `src/main` + `src/preload`      |
+| `npm run typecheck:web`  | Type-check only the React renderer              |
+| `npm run format`         | Format all files with Prettier                  |
+| `npm run build`          | Compile main, preload, and renderer into `out/` |
+| `npm run start`          | Preview the compiled app from `out/`            |
+| `npm run build:unpack`   | Package an unpacked app into `dist/`            |
+| `npm run build:mac`      | Build a macOS installer (`.dmg`)                |
+| `npm run build:win`      | Build a Windows installer                       |
+| `npm run build:linux`    | Build Linux packages (AppImage, snap, deb)      |
 
 ## Project structure
 
@@ -86,21 +90,25 @@ This starts electron-vite, opens the app window, and enables hot reload for the 
 file-manager/
 ├── src/
 │   ├── main/
-│   │   └── index.js          # Electron main process + IPC handlers
+│   │   └── index.ts          # Electron main process + IPC handlers
 │   ├── preload/
-│   │   └── index.js          # Safe bridge exposed through contextBridge
+│   │   ├── index.ts          # Safe bridge exposed through contextBridge
+│   │   └── index.d.ts        # Declares window.fileApi for the renderer
+│   ├── shared/
+│   │   └── types.ts          # FileEntry / DirResult shared by all three processes
 │   └── renderer/
 │       ├── index.html
 │       └── src/
-│           ├── App.jsx       # State, data loading, navigation
-│           ├── main.jsx      # React entry point
+│           ├── App.tsx       # State, data loading, navigation
+│           ├── main.tsx      # React entry point
+│           ├── env.d.ts      # Vite client types
 │           ├── components/
-│           │   ├── Toolbar.jsx
-│           │   ├── FileList.jsx
-│           │   ├── FileItem.jsx
-│           │   └── DetailsPanel.jsx
+│           │   ├── Toolbar.tsx
+│           │   ├── FileList.tsx
+│           │   ├── FileItem.tsx
+│           │   └── DetailsPanel.tsx
 │           ├── utils/
-│           │   └── format.js # File size and date formatting
+│           │   └── format.ts # File size and date formatting
 │           └── assets/       # Global CSS and icons
 ├── build/                    # App icons and macOS entitlements
 ├── docs/
@@ -109,6 +117,9 @@ file-manager/
 │   └── screenshots/
 ├── electron-builder.yml      # Packaging configuration
 ├── electron.vite.config.mjs  # electron-vite configuration
+├── tsconfig.json             # Solution file referencing the two projects below
+├── tsconfig.node.json        # Main + preload + vite config (Node types)
+├── tsconfig.web.json         # Renderer (DOM types, react-jsx)
 └── package.json
 ```
 
@@ -118,11 +129,35 @@ The renderer never touches the file system. It asks the preload bridge, which se
 
 The full walkthrough — including the IPC table, the data shape, and what happens on a double-click — is in [`docs/architecture.md`](docs/architecture.md).
 
+## TypeScript setup
+
+All source files are TypeScript (`.ts` / `.tsx`). electron-vite transpiles them automatically; no build configuration was needed for the migration. Type checking is a separate step:
+
+```bash
+npm run typecheck
+```
+
+| File                        | Role                                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `tsconfig.node.json`        | Main + preload + `electron.vite.config.mjs`; includes Node globals and electron-vite's `?asset` module types |
+| `tsconfig.web.json`         | Renderer; DOM types, `react-jsx`, and the `@renderer/*` path alias to `src/renderer/src`                     |
+| `tsconfig.json`             | Solution file referencing both projects so editors can use them together                                     |
+| `src/shared/types.ts`       | `FileEntry` and `DirResult`, imported by the main process, preload, and renderer                             |
+| `src/preload/index.d.ts`    | Declares the three functions on `window.fileApi` for the renderer                                            |
+| `src/renderer/src/env.d.ts` | Vite client types                                                                                            |
+
+Two details are worth knowing:
+
+- **`npm run build` does not type-check.** It transpiles with esbuild. Run `npm run typecheck` before shipping.
+- **`noImplicitAny` is currently `false`** (from `@electron-toolkit/tsconfig`). All props and handlers are annotated explicitly, so no implicit `any`s remain today, but the checker will not catch a new one until that flag is enabled.
+
+`react/prop-types` is deliberately off: TypeScript's prop interfaces replace runtime PropTypes entirely.
+
 ## Security decisions
 
 - **Context isolation stays on** (Electron's default) and **Node integration stays off**, so renderer code cannot access Node or Electron internals directly.
-- The preload exposes **only three named functions** (`getHomeDir`, `readDir`, `openPath`) instead of exposing `ipcRenderer` itself.
-- The main process **validates input** before using a path: it must be a string and an absolute path.
+- The preload exposes **only three named functions** (`getHomeDir`, `readDir`, `openPath`) instead of exposing `ipcRenderer` itself. Their signatures are declared in `src/preload/index.d.ts`.
+- Both IPC handlers **validate input** before using a path: it must be a string and an absolute path. `fs:readDir` rejects with `Invalid folder path`, `shell:openPath` with `Invalid file path`.
 - File system access uses **async `fs/promises`**, so the UI never freezes on slow folders.
 - The `remote` module is not used; all communication goes through `ipcMain.handle` / `ipcRenderer.invoke`.
 - `sandbox: false` is kept from the electron-vite template so the preload bundle can use Node imports. This is a known trade-off and a candidate for future hardening.
@@ -147,6 +182,7 @@ Builds are currently **unsigned** and **not notarized**. Locally built apps run 
 - Symlinked directories are followed for navigation, but symlink loops are not specially handled.
 - Permission errors are shown as an error message; there is no retry button.
 - No automated tests yet.
+- Type errors are only reported by `npm run typecheck`, not by `npm run build`; `noImplicitAny` is still off.
 - Only macOS has been tested.
 - The packaged app is unsigned.
 
@@ -159,10 +195,11 @@ Builds are currently **unsigned** and **not notarized**. Locally built apps run 
 - "Reveal in Finder" using `shell.showItemInFolder`.
 - Virtualized file list for huge folders.
 - Automated tests for the main-process handlers and React components.
+- Enable `noImplicitAny` and add `typecheck` to a CI pipeline.
 - CI builds for macOS, Windows, and Linux, with code signing and notarization.
 
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) — process model, IPC channels, and request walkthroughs.
 - [`docs/learnings.md`](docs/learnings.md) — what was learned, bugs hit, and open questions.
-- [`docs/screenshots/`](docs/screenshots/) — screenshots used in this README and the demo.
+- [`docs/screenshots/`](docs/screenshots/README.md) — screenshots used in this README and the demo, with regeneration instructions.

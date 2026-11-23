@@ -2,6 +2,8 @@
 
 A running log of what I learned while building the file manager, the bugs I hit, and the questions I still have. I kept this while building, so the mistakes are the useful part.
 
+The examples below show the code as it was written at the time (plain JavaScript). The source is now TypeScript — `.ts` / `.tsx` — so some snippets are intentionally the "before" version. The TypeScript migration has its own section near the end.
+
 ## React
 
 ### Props are one object, not separate arguments
@@ -113,6 +115,12 @@ The important distinction: **Finder is a file manager, not the default handler f
 
 `fs.readdir(..., { withFileTypes: true })` returns `Dirent` objects. For a symlink, `entry.isDirectory()` is `false` even when the link points to a folder. Since I already call `fs.stat` (which follows links), using `stats.isDirectory()` makes symlinked folders navigable instead of sending them to `openPath`.
 
+### Not every icon location is the packaged icon
+
+`resources/icon.png` is only the runtime icon (Linux window icon, and the dev Dock icon via `app.dock.setIcon`). The icon Finder shows for the packaged app comes from `build/icon.png`, which electron-builder converts into `Contents/Resources/icon.icns`. Changing only `resources/icon.png` therefore does nothing to the built app. A 1024×1024 `build/icon.png` is the single master; the stale `build/icon.icns` and `build/icon.ico` have to be removed so electron-builder regenerates them.
+
+If Finder still shows the old icon after a rebuild, macOS is caching it. `killall Dock` or forcing LaunchServices to re-read the bundle with `lsregister -f` resolves it.
+
 ### Packaging is a separate step from building
 
 - `npm run build` only compiles into `out/`.
@@ -169,7 +177,7 @@ Even with `overflow-y: auto`, macOS may hide the scrollbar until you scroll. Sty
 
 After building `FileList` and `FileItem`, VSCode showed a wall of red. Only two errors were real (missing `Toolbar` and `DetailsPanel` files). The rest were:
 
-- `react/prop-types` — not used in a plain-JS project; turned off.
+- `react/prop-types` — not used in a plain-JS project; turned off. It stayed off after the TypeScript migration because prop interfaces replace runtime PropTypes entirely.
 - `prettier/prettier` — formatting; fixed with `npm run format`.
 - `react-hooks/set-state-in-effect` — a strict new rule that flags the fetch-on-path-change pattern; disabled for that one effect with a comment.
 
@@ -179,6 +187,59 @@ The lesson: read the rule name and the file before assuming the app is broken.
 
 Adding `editor.formatOnSave` plus Prettier and `source.fixAll.eslint` means formatting and auto-fixable lint issues never accumulate.
 
+## TypeScript migration
+
+### Renaming files is not the same as typing them
+
+Renaming `.jsx` to `.tsx` compiled cleanly even though every component still had untyped props. The shared toolkit config sets `strict: true` but also `noImplicitAny: false`, so every unannotated prop and handler parameter silently became `any`. I ran the checker once with `--noImplicitAny` forced on, which found exactly the two remaining untyped functions in `App.tsx`. All four components now have explicit prop interfaces.
+
+### `filter(Boolean)` does not narrow types
+
+`items` was `(FileEntry | null)[]`, and the JS version skipped unreadable entries with `.filter(Boolean)`. TypeScript still considered the result `(FileEntry | null)[]`, so the following `.sort()` compared `FileEntry | null` values. The fix is a type predicate:
+
+```ts
+.filter((item): item is FileEntry => item !== null)
+```
+
+### Arithmetic on booleans is not allowed
+
+The sort used `b.isDirectory - a.isDirectory` to put folders first, relying on JS coercing `true`/`false` to `1`/`0`. TypeScript rejects arithmetic on booleans. I replaced it with an explicit comparison:
+
+```ts
+if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+return a.name.localeCompare(b.name)
+```
+
+`Number(b.isDirectory) - Number(a.isDirectory) || ...` would also work, but it makes you read coercion to understand the order.
+
+### `getElementById` can return null
+
+`createRoot(document.getElementById('root'))` failed with `TS2345`: `HTMLElement | null` is not a valid `Container`. I added an explicit check that throws a named error, so a future HTML/script mismatch fails with a useful message rather than a null dereference.
+
+### Electron's `app.dock` is optional in the type system
+
+`app.dock.setIcon(icon)` failed with `TS18048` even though the code was already inside `if (process.platform === 'darwin')`. The type system does not narrow a property from a string comparison, so I used `app.dock?.setIcon(icon)`.
+
+### Two tsconfigs need two different type sets
+
+`tsconfig.node.json` uses `types: ["electron-vite/node", "node"]`. The first entry declares Vite's `?asset` imports, which the main process uses for the icon. The second matters more subtly: writing only `["electron-vite/node"]` **replaces** the toolkit base's `["node"]`, which made `process` and `__dirname` unresolved the moment `src/main/index.ts` existed.
+
+### `allowJs` + `composite` needs an `outDir`
+
+Enabling `allowJs` for a gradual migration caused five `TS5055: Cannot write file ... because it would overwrite input file` errors in VS Code. `composite: true` implies emit, and with no `outDir`, TypeScript would emit `src/main/index.js` on top of the `src/main/index.js` that `allowJs` had marked as an input. Giving each project its own `outDir` under `node_modules/.tmp` fixed it. `npm run typecheck` had not shown this because its scripts pass `--noEmit --composite false` — the editor and the CLI were checking different configurations.
+
+### A wrong annotation can hide for a long time
+
+`formatDate(ms: string)` was wrong: `modified` is an `mtimeMs` number. It compiled because `DetailsPanel`'s untyped `item` was `any`. Once props are typed, a wrong annotation stops being harmless. Likewise, annotating a `.catch` parameter as `Error` is a claim, not a check — I switched to `err instanceof Error ? ... : 'Unknown error'` so a non-`Error` rejection cannot silently set an undefined error message.
+
+### Installing the latest TypeScript broke typescript-eslint
+
+`npm i -D typescript` pulled TypeScript 7, but `typescript-eslint@8.73` supports only `<6.1`. The fix was pinning `typescript@~5.9.3`. Using `--legacy-peer-deps` would have hidden a genuine incompatibility.
+
+### Build and typecheck are different commands
+
+electron-vite transpiles TypeScript through esbuild without checking types, so `npm run build` succeeding says nothing about type correctness. `npm run typecheck` is the gate. Same story for `src/renderer/index.html`: after renaming `main.jsx` to `main.tsx`, the HTML script tag still pointed at the old path, which neither TypeScript nor ESLint sees. Only a real build/dev run catches that.
+
 ## What I would do differently
 
 1. **Write the props contract before the component.** A small table of prop names, types, and purpose would have prevented the Toolbar signature bug.
@@ -187,6 +248,8 @@ Adding `editor.formatOnSave` plus Prettier and `source.fixAll.eslint` means form
 4. **Change one thing at a time.** The Toolbar had four bugs at once because I wrote the whole component before running it.
 5. **Add tests earlier.** Even a few tests for `formatSize`, `formatDate`, and the IPC validation would have caught the missing parentheses and the path checks.
 6. **Keep the bug log while building.** Writing these entries after the fact was harder than it needed to be.
+7. **Set up the checker before renaming files.** A green `typecheck` with no TypeScript files in the program is meaningless; I should have verified which files the compiler actually included.
+8. **Enable `noImplicitAny` from the start.** It turns "I remembered to annotate everything" into a rule the compiler enforces.
 
 ## Questions I still have
 
@@ -198,3 +261,5 @@ Adding `editor.formatOnSave` plus Prettier and `source.fixAll.eslint` means form
 - What is the cleanest way to add code signing and notarization to a CI pipeline?
 - What is worth testing first: the IPC handlers, the React components, or both?
 - Should hidden files be hidden by default, with a toggle, instead of always shown?
+- Should `noImplicitAny` be enabled now, and should `typecheck` run in a pre-commit hook or CI?
+- Should the shared `FileEntry` type live in `src/shared` or be generated from the IPC schema?

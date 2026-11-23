@@ -6,8 +6,8 @@ This document explains how the app is split across Electron's processes, what ea
 
 | Process      | File                   | Responsibility                                                                  | Can access the file system?                  |
 | ------------ | ---------------------- | ------------------------------------------------------------------------------- | -------------------------------------------- |
-| **Main**     | `src/main/index.js`    | Creates windows, owns the app lifecycle, reads folders, opens files with the OS | Yes, through Node                            |
-| **Preload**  | `src/preload/index.js` | Runs before the page loads and exposes a small, explicit API to the renderer    | No direct file access; it forwards IPC calls |
+| **Main**     | `src/main/index.ts`    | Creates windows, owns the app lifecycle, reads folders, opens files with the OS | Yes, through Node                            |
+| **Preload**  | `src/preload/index.ts` | Runs before the page loads and exposes a small, explicit API to the renderer    | No direct file access; it forwards IPC calls |
 | **Renderer** | `src/renderer/src/**`  | React UI: state, rendering, clicks, and navigation                              | No — it only calls `window.fileApi`          |
 
 The key rule: **the renderer never touches `fs` or `path`.** Everything that needs the operating system goes through the preload bridge to the main process.
@@ -16,7 +16,7 @@ The key rule: **the renderer never touches `fs` or `path`.** Everything that nee
 
 ### Main process
 
-`src/main/index.js` does three jobs:
+`src/main/index.ts` does three jobs:
 
 1. **App lifecycle** — `app.whenReady()`, window creation, macOS `activate`, and `window-all-closed`.
 2. **File system access** — `fs:getHomeDir` returns the user's home folder, and `fs:readDir` reads a folder and returns plain JSON-safe data.
@@ -26,25 +26,42 @@ It also keeps the existing electron-vite behaviour: load the dev server URL in d
 
 ### Preload
 
-`src/preload/index.js` exposes exactly three functions:
+`src/preload/index.ts` exposes exactly three functions:
 
-```js
+```ts
 contextBridge.exposeInMainWorld('fileApi', {
-  getHomeDir: () => ipcRenderer.invoke('fs:getHomeDir'),
-  readDir: (dirPath) => ipcRenderer.invoke('fs:readDir', dirPath),
-  openPath: (filePath) => ipcRenderer.invoke('shell:openPath', filePath)
+  getHomeDir: (): Promise<string> => ipcRenderer.invoke('fs:getHomeDir'),
+  readDir: (dirPath: string): Promise<DirResult> => ipcRenderer.invoke('fs:readDir', dirPath),
+  openPath: (filePath: string): Promise<void> => ipcRenderer.invoke('shell:openPath', filePath)
 })
 ```
 
-It never exposes `ipcRenderer` itself. The renderer can only call these three operations — it cannot invent new IPC channels or reach Node APIs.
+It never exposes `ipcRenderer` itself. The renderer can only call these three operations — it cannot invent new IPC channels or reach Node APIs. `src/preload/index.d.ts` declares this shape as `Window.fileApi`, so the renderer gets autocomplete and compile-time checking on the bridge.
 
 ### Renderer
 
 The renderer is a normal React app:
 
-- `App.jsx` owns all application state and the data-loading effect.
-- `Toolbar`, `FileList`, `FileItem`, and `DetailsPanel` are presentational components that receive props and report events.
-- `utils/format.js` contains pure formatting helpers.
+- `App.tsx` owns all application state and the data-loading effect.
+- `Toolbar`, `FileList`, `FileItem`, and `DetailsPanel` are presentational components with typed prop interfaces that receive props and report events.
+- `utils/format.ts` contains pure formatting helpers.
+
+## TypeScript layout
+
+The source is TypeScript end to end. electron-vite transpiles it with esbuild, so the build config needed no changes; checking types is a separate step run with `npm run typecheck`.
+
+| File                        | Role                                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `tsconfig.node.json`        | Main + preload + `electron.vite.config.mjs`; Node globals and electron-vite's `?asset` module declarations |
+| `tsconfig.web.json`         | Renderer; DOM types, `react-jsx`, and the `@renderer/*` alias                                              |
+| `tsconfig.json`             | Solution file with references to both projects                                                             |
+| `src/shared/types.ts`       | `FileEntry` and `DirResult`, used by main, preload, and renderer                                           |
+| `src/preload/index.d.ts`    | Global declaration for `window.fileApi`                                                                    |
+| `src/renderer/src/env.d.ts` | Vite client types                                                                                          |
+
+`allowJs` is enabled with `checkJs: false`, so any remaining `.js`/`.jsx` file still resolves during a gradual migration without being reported on. Each project has an `outDir` under `node_modules/.tmp` because `composite: true` implies emit; without it, TypeScript would try to overwrite the `.js` source files that `allowJs` pulls in.
+
+`strict` is on, but `noImplicitAny` is still `false` in the shared toolkit base. Props and handler parameters are annotated explicitly today, so no implicit `any`s remain — enabling that flag is the next hardening step.
 
 ## IPC channels
 
@@ -58,7 +75,7 @@ The renderer is a normal React app:
 
 ## The item data shape
 
-Each entry returned by `fs:readDir` looks like this:
+Each entry returned by `fs:readDir` is a `FileEntry` (defined in `src/shared/types.ts`):
 
 | Field         | Type    | Example                           | Notes                                                |
 | ------------- | ------- | --------------------------------- | ---------------------------------------------------- |
@@ -128,7 +145,7 @@ sequenceDiagram
 
 ## State ownership
 
-All state lives in `App.jsx`:
+All state lives in `App.tsx`:
 
 | State         | Purpose                                               |
 | ------------- | ----------------------------------------------------- |
@@ -147,5 +164,5 @@ Child components are intentionally stateless. This keeps the data flow one-direc
 - **Invalid IPC input** is rejected in the main process, not trusted from the UI.
 - **Unreadable entries** are skipped during `readDir` instead of failing the folder.
 - **Folder read failures** (for example, permission denied) reject the promise and appear in the error state.
-- **File open failures** (no associated app, missing file) are caught in `App` and shown as an error message.
+- **File open failures** (no associated app, missing file) are caught in `App` and shown as an error message. Both `.catch` handlers check `err instanceof Error` before reading `err.message`, with an `Unknown error` fallback for non-`Error` rejections.
 - **Stale requests** are ignored through the `cancelled` flag in the effect cleanup.
