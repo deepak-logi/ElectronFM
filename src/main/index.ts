@@ -5,10 +5,12 @@ import icon from '../../resources/icon.png?asset'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import os from 'node:os'
+import type { DirResult, FileEntry } from '../shared/types'
 
 ipcMain.handle('fs:getHomeDir', () => os.homedir())
 
-ipcMain.handle('fs:readDir', async (_event, dirPath) => {
+ipcMain.handle('fs:readDir', async (_event, dirPath): Promise<DirResult> => {
+  // force returned obj to DirResult type
   if (typeof dirPath !== 'string' || !path.isAbsolute(dirPath)) {
     throw new Error('Invalid folder path')
   }
@@ -35,8 +37,8 @@ ipcMain.handle('fs:readDir', async (_event, dirPath) => {
   )
 
   const sorted = items
-    .filter(Boolean)
-    .sort((a, b) => b.isDirectory - a.isDirectory || a.name.localeCompare(b.name))
+    .filter((item): item is FileEntry => item !== null) // filter(Boolean) doesnt narrow FileEntry | null to FileEntry in TS
+    .sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name)) // converting to Number, since req for arithmetic operation
 
   const parent = path.dirname(dirPath)
   return { path: dirPath, parent: parent !== dirPath ? parent : null, items: sorted }
@@ -92,12 +94,11 @@ app.whenReady().then(() => {
   // In development the Dock would otherwise show Electron's default icon.
   // Packaged builds use the icon embedded by electron-builder instead.
   if (is.dev && process.platform === 'darwin') {
-    app.dock.setIcon(icon)
+    app.dock?.setIcon(icon) // changing to optional call since we changed to TS
   }
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
