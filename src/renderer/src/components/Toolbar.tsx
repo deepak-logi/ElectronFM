@@ -1,4 +1,12 @@
-export default function Toolbar({ currentPath, canGoBack, canGoUp, onBack, onUp }) {
+interface ToolbarProps {
+  currentPath: string
+  canGoBack: boolean
+  canGoUp: boolean
+  onBack: () => void
+  onUp: () => void
+}
+
+export default function Toolbar({ currentPath, canGoBack, canGoUp, onBack, onUp }: ToolbarProps) {
   return (
     <header className="toolbar">
       <button type="button" onClick={onBack} disabled={!canGoBack}>

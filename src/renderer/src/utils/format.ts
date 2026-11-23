@@ -14,6 +14,6 @@ export function formatSize(bytes: number) {
   return `${value.toFixed(1)} ${units[unit]}`
 }
 
-export function formatDate(ms: string) {
+export function formatDate(ms: number) {
   return new Date(ms).toLocaleString()
 }

@@ -1,6 +1,11 @@
 import { formatSize, formatDate } from '../utils/format'
+import type { FileEntry } from '../../../shared/types'
 
-export default function DetailsPanel({ item }) {
+interface DetailsPanelProps {
+  item: FileEntry | null
+}
+
+export default function DetailsPanel({ item }: DetailsPanelProps) {
   if (!item) {
     return <aside className="details-panel">Select a file to see its details.</aside>
   }
@@ -22,7 +27,7 @@ export default function DetailsPanel({ item }) {
         <dd>{item.isDirectory ? '-' : formatSize(item.size)}</dd>
 
         <dt>Modified</dt>
-        <dd>{formatDate(item.modified)}</dd>
+        <dd>{formatDate(Number(item.modified))}</dd>
 
         <dt>Path</dt>
         <dd className="details-path" title={item.path}>

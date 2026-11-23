@@ -34,7 +34,7 @@ export default function App() {
         setItems(result.items)
         setParentPath(result.parent)
       })
-      .catch((err) => !cancelled && setError(err.message))
+      .catch((err) => !cancelled && setError(err instanceof Error ? err.message : 'Unknown error'))
       .finally(() => !cancelled && setLoading(false))
 
     return () => {
@@ -43,7 +43,7 @@ export default function App() {
   }, [currentPath])
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  function navigateTo(newPath) {
+  function navigateTo(newPath: string) {
     setHistory((prev) => [...prev, currentPath])
     setCurrentPath(newPath)
   }
@@ -54,9 +54,12 @@ export default function App() {
     setHistory((prev) => prev.slice(0, -1))
   }
 
-  function handleOpen(item) {
+  function handleOpen(item: FileEntry) {
     if (item.isDirectory) navigateTo(item.path)
-    else window.fileApi.openPath(item.path).catch((err) => setError(err.message))
+    else
+      window.fileApi
+        .openPath(item.path)
+        .catch((err) => setError(err instanceof Error ? err.message : 'Unknown error'))
   }
 
   return (
