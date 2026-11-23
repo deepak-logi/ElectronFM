@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import Toolbar from './components/Toolbar'
 import FileList from './components/FileList'
 import DetailsPanel from './components/DetailsPanel'
+import type { FileEntry } from '../../shared/types'
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState('')
-  const [parentPath, setParentPath] = useState(null)
-  const [history, setHistory] = useState([])
-  const [items, setItems] = useState([])
-  const [selected, setSelected] = useState(null)
+  const [parentPath, setParentPath] = useState<string | null>(null)
+  const [history, setHistory] = useState<string[]>([])
+  const [items, setItems] = useState<FileEntry[]>([])
+  const [selected, setSelected] = useState<FileEntry | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
