@@ -7,7 +7,7 @@ declare global {
   interface Window {
     fileApi: {
       getHomeDir: () => Promise<string>
-      readDir: (dirPath: string) => Promise<DirResult>
+      readDir: (dirPath: string, showHidden: boolean) => Promise<DirResult>
       openPath: (filePath: string) => Promise<void>
     }
   }

@@ -27,6 +27,11 @@
       opacity: 0.4;
       cursor: not-allowed;
     }
+
+    &--active {
+      background: var(--color-selected);
+      color: var(--color-accent);
+    }
   }
 
   &__path {

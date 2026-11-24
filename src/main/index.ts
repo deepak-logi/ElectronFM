@@ -8,40 +8,48 @@ import type { DirResult, FileEntry } from '../shared/types'
 
 ipcMain.handle('fs:getHomeDir', (): string => os.homedir())
 
-ipcMain.handle('fs:readDir', async (_event, dirPath: unknown): Promise<DirResult> => {
-  // force returned obj to DirResult type
-  if (typeof dirPath !== 'string' || !path.isAbsolute(dirPath)) {
-    throw new Error('Invalid folder path')
-  }
+ipcMain.handle(
+  'fs:readDir',
+  async (_event, dirPath: unknown, showHidden: unknown): Promise<DirResult> => {
+    // force returned obj to DirResult type
+    if (typeof dirPath !== 'string' || !path.isAbsolute(dirPath)) {
+      throw new Error('Invalid folder path')
+    }
+    if (typeof showHidden !== 'boolean') {
+      throw new Error('Invalid showHidden flag')
+    }
 
-  const entries = await fs.readdir(dirPath, { withFileTypes: true })
+    const entries = await fs.readdir(dirPath, { withFileTypes: true })
 
-  const items = await Promise.all(
-    entries.map(async (entry) => {
-      const fullPath = path.join(dirPath, entry.name)
-      try {
-        const stats = await fs.stat(fullPath) // follows symlinks
-        return {
-          name: entry.name,
-          path: fullPath,
-          isDirectory: stats.isDirectory(),
-          size: stats.size,
-          modified: stats.mtimeMs,
-          extension: path.extname(entry.name).toLowerCase()
+    const items = await Promise.all(
+      entries.map(async (entry) => {
+        // adding hidden file toggle
+        if (!showHidden && entry.name.startsWith('.')) return null
+        const fullPath = path.join(dirPath, entry.name)
+        try {
+          const stats = await fs.stat(fullPath) // follows symlinks
+          return {
+            name: entry.name,
+            path: fullPath,
+            isDirectory: stats.isDirectory(),
+            size: stats.size,
+            modified: stats.mtimeMs,
+            extension: path.extname(entry.name).toLowerCase()
+          }
+        } catch {
+          return null // Skip files we can't read
         }
-      } catch {
-        return null // Skip files we can't read
-      }
-    })
-  )
+      })
+    )
 
-  const sorted = items
-    .filter((item): item is FileEntry => item !== null) // filter(Boolean) doesnt narrow FileEntry | null to FileEntry in TS
-    .sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name)) // converting to Number, since req for arithmetic operation
+    const sorted = items
+      .filter((item): item is FileEntry => item !== null) // filter(Boolean) doesnt narrow FileEntry | null to FileEntry in TS
+      .sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name)) // converting to Number, since req for arithmetic operation
 
-  const parent = path.dirname(dirPath)
-  return { path: dirPath, parent: parent !== dirPath ? parent : null, items: sorted }
-})
+    const parent = path.dirname(dirPath)
+    return { path: dirPath, parent: parent !== dirPath ? parent : null, items: sorted }
+  }
+)
 
 ipcMain.handle('shell:openPath', async (_event, filePath: unknown): Promise<void> => {
   if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) {

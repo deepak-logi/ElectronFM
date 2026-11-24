@@ -12,6 +12,7 @@ export default function App() {
   const [selected, setSelected] = useState<FileEntry | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showHidden, setShowHidden] = useState(false)
 
   // Starting in home folder
   useEffect(() => {
@@ -28,7 +29,7 @@ export default function App() {
     setSelected(null)
 
     window.fileApi
-      .readDir(currentPath)
+      .readDir(currentPath, showHidden)
       .then((result) => {
         if (cancelled) return
         setItems(result.items)
@@ -43,7 +44,7 @@ export default function App() {
     return () => {
       cancelled = true
     } // Ignoring results from outdated requests
-  }, [currentPath])
+  }, [currentPath, showHidden])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   function navigateTo(newPath: string) {
@@ -73,6 +74,8 @@ export default function App() {
         canGoUp={Boolean(parentPath)}
         onBack={goBack}
         onUp={() => parentPath && navigateTo(parentPath)}
+        showHidden={showHidden}
+        onToggleHidden={() => setShowHidden((prev) => !prev)}
       />
 
       <main className="content">
