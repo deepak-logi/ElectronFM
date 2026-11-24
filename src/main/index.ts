@@ -1,10 +1,16 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, systemPreferences } from 'electron'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import path, { join } from 'node:path'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import type { DirResult, FileEntry } from '../shared/types'
+
+// In development the process is still Electron's binary, so the Dock tooltip
+// says "Electron". The packaged app gets its name from Info.plist instead.
+if (is.dev && process.platform === 'darwin') {
+  app.setName('File Manager')
+}
 
 ipcMain.handle('fs:getHomeDir', (): string => os.homedir())
 
@@ -59,6 +65,15 @@ ipcMain.handle('shell:openPath', async (_event, filePath: unknown): Promise<void
   if (errorMessage) throw new Error(errorMessage)
 })
 
+function macAccent(): string | null {
+  if (process.platform !== 'darwin') return null
+  const rgba = systemPreferences.getAccentColor() // "RRGGBBAA"
+  if (!rgba || rgba.length < 6) return null
+  return `#${rgba.slice(0, 6)}`
+}
+
+ipcMain.handle('system:getAccentColor', (): string | null => macAccent())
+
 function createWindow() {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -91,6 +106,10 @@ function createWindow() {
   }
 }
 
+if (is.dev && process.platform === 'darwin') {
+  app.setName('File Manager')
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -117,6 +136,38 @@ app.whenReady().then(() => {
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+
+  if (process.platform === 'darwin') {
+    // macOS does not emit Electron's `accent-color-changed` event (that one is
+    // Windows/Linux only). The accent/tint change is delivered as a distributed
+    // notification; subscribe to all relevant names because System Settings
+    // does not post the same one for every accent change.
+    const accentNotifications = [
+      'AppleAquaColorVariantChanged',
+      'AppleColorPreferencesChangedNotification',
+      'AppleInterfaceThemeChangedNotification'
+    ]
+
+    let lastAccent = macAccent()
+
+    const broadcastAccent = () => {
+      const color = macAccent()
+      if (color === lastAccent) return
+      lastAccent = color
+
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('system:accent-changed', color)
+      }
+    }
+
+    for (const notification of accentNotifications) {
+      systemPreferences.subscribeNotification(notification, () => {
+        // The notification can arrive before macOS has written the new value,
+        // so read once after a short delay instead of reading immediately.
+        setTimeout(broadcastAccent, 100)
+      })
+    }
+  }
 })
 
 // Quit when all windows are closed, except on macOS. There, it's common

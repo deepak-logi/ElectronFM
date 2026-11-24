@@ -24,6 +24,7 @@ A small desktop file manager built with Electron and React. It browses the local
 - File-type icons, hover, selected, and keyboard focus states.
 - Show/hide hidden files (dot-prefixed names) with a toolbar toggle.
 - Switch between the default palette and Catppuccin; the OS still decides light or dark (Latte / Mocha).
+- In the default palette, file selection and focus colours follow the macOS accent color live.
 - Loading, error, and empty-folder states.
 
 **Not implemented (out of scope for this build)**
@@ -171,6 +172,7 @@ The template CSS has been replaced by an SCSS structure under `src/renderer/src/
 - **Sass for compile-time values** — the spacing scale, radii, and layout sizes (`space(3)`, `$toolbar-height`).
 - **CSS custom properties for colors** — they survive the build and switch under `@media (prefers-color-scheme: dark)`.
 - **Two theme families** — the toolbar toggle writes `data-theme-family` on `<html>` and persists it in `localStorage`; within each family the OS still decides light vs dark. Catppuccin uses Latte for light and Mocha for dark.
+- **System accent** — in the default family only, a `--accent-source` custom property is mapped onto `--color-accent` and `--color-selected`. Text selection (`::selection`) is left to macOS.
 - **CSS Grid layout** — toolbar across the top, file list on the left, details panel on the right, each scrolling independently.
 
 The full conventions and folder guide are in [`docs/styling.md`](docs/styling.md).
@@ -178,7 +180,7 @@ The full conventions and folder guide are in [`docs/styling.md`](docs/styling.md
 ## Security decisions
 
 - **Context isolation stays on** (Electron's default) and **Node integration stays off**, so renderer code cannot access Node or Electron internals directly.
-- The preload exposes **only three named functions** (`getHomeDir`, `readDir`, `openPath`) instead of exposing `ipcRenderer` itself. Their signatures are declared in `src/preload/index.d.ts`.
+- The preload exposes **five named functions** (`getHomeDir`, `readDir`, `openPath`, `getAccentColor`, `onAccentColorChanged`) instead of exposing `ipcRenderer` itself. `onAccentColorChanged` returns an unsubscribe function, and all signatures are declared in `src/preload/index.d.ts`.
 - Both IPC handlers **validate input** before using a path: the argument is typed `unknown`, then narrowed to a string and checked with `path.isAbsolute`. `fs:readDir` rejects with `Invalid folder path`, `shell:openPath` with `Invalid file path`.
 - File system access uses **async `fs/promises`**, so the UI never freezes on slow folders.
 - The `remote` module is not used; all communication goes through `ipcMain.handle` / `ipcRenderer.invoke`.
@@ -207,6 +209,7 @@ Builds are currently **unsigned** and **not notarized**. Locally built apps run 
 - No automated tests yet.
 - Type errors are only reported by `npm run typecheck`, not by `npm run build`.
 - Only macOS has been tested.
+- In development the macOS Dock tooltip says **Electron**; the packaged app shows **FileManager**. `app.setName()` changes Electron's internal name but not the OS-supplied Dock label, which comes from `Electron.app`'s `Info.plist` in dev.
 - The packaged app is unsigned.
 
 ## Next steps

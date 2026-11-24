@@ -13,6 +13,35 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showHidden, setShowHidden] = useState(false)
+  const [systemAccent, setSystemAccent] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+
+    window.fileApi
+      .getAccentColor()
+      .then((color) => active && setSystemAccent(color))
+      .catch(() => active && setSystemAccent(null))
+
+    const unsubscribe = window.fileApi.onAccentColorChanged(setSystemAccent)
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    const root = document.documentElement
+    if (systemAccent) {
+      root.style.setProperty('--accent-source', systemAccent)
+      // The CSS block that maps --accent-source onto the theme tokens is
+      // gated on this attribute; a custom property alone is not selectable.
+      root.dataset.accentSource = 'true'
+    } else {
+      root.style.removeProperty('--accent-source')
+      delete root.dataset.accentSource
+    }
+  }, [systemAccent])
 
   const [themeFamily, setThemeFamily] = useState<ThemeFamily>(() => {
     const saved = localStorage.getItem('fm-theme-family')

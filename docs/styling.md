@@ -96,6 +96,31 @@ That writes `data-theme-family="default"` or `data-theme-family="catppuccin"`. T
 
 The attribute selector is more specific than `:root`, so it wins in both appearances. The toggle never forces light or dark — the OS media query still decides whether a family renders its light or dark tokens. Catppuccin values come from the official v1.8.0 palette; `--color-danger-bg` is derived with `color-mix()` instead of an off-palette hex.
 
+### System accent
+
+In the **default** family only, the macOS accent colour drives the app-drawn selection and focus colours. The renderer writes a CSS custom property and a matching attribute on `<html>`:
+
+```ts
+root.style.setProperty('--accent-source', systemAccent)
+root.dataset.accentSource = 'true'
+```
+
+The attribute matters: a CSS custom property is not an attribute, so `:root[data-accent-source]` will not match unless the attribute is also set. The stylesheet then maps the source onto two tokens:
+
+```scss
+:root[data-accent-source]:not([data-theme-family='catppuccin']) {
+  --color-accent: color-mix(in srgb, var(--accent-source) 88%, var(--color-text));
+  --color-selected: color-mix(in srgb, var(--accent-source) 18%, var(--color-bg));
+}
+```
+
+- `--color-accent` is nudged toward the theme's text colour so focus rings stay visible even if macOS reports a very pale or very dark accent.
+- `--color-selected` is a subtle tint mixed with the current background, so it adapts to light and dark without separate values.
+- `:not([data-theme-family='catppuccin'])` keeps Latte/Mocha on their own blues.
+- `::selection` is deliberately not styled — Chromium already follows the macOS accent for text selection.
+
+The main process re-reads the accent 100 ms after macOS posts a change notification (the value can still be stale at the moment the notification arrives) and only pushes it when it actually changed.
+
 **Spacing is a Sass map**, exposed through a function:
 
 ```scss

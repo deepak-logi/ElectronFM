@@ -62,3 +62,11 @@
     --color-danger-bg: color-mix(in srgb, var(--color-danger) 12%, var(--color-bg));
   }
 }
+
+:root[data-accent-source]:not([data-theme-family='catppuccin']) {
+  // Nudge the accent toward the theme's text colour so focus rings stay
+  // visible even when macOS reports a very pale or very dark accent.
+  --color-accent: color-mix(in srgb, var(--accent-source) 88%, var(--color-text));
+  // Keep the file-row selection a subtle tint that works in both appearances.
+  --color-selected: color-mix(in srgb, var(--accent-source) 18%, var(--color-bg));
+}

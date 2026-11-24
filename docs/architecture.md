@@ -16,27 +16,35 @@ The key rule: **the renderer never touches `fs` or `path`.** Everything that nee
 
 ### Main process
 
-`src/main/index.ts` does three jobs:
+`src/main/index.ts` does four jobs:
 
 1. **App lifecycle** — `app.whenReady()`, window creation, macOS `activate`, and `window-all-closed`.
 2. **File system access** — `fs:getHomeDir` returns the user's home folder, and `fs:readDir` reads a folder and returns plain JSON-safe data.
 3. **Shell integration** — `shell:openPath` hands a file to the operating system, which opens it with the default application for that file type.
+4. **System integration** — `system:getAccentColor` reports the macOS accent, and notifications push changes to the renderer via `system:accent-changed`.
 
 It also keeps the existing electron-vite behaviour: load the dev server URL in development, or the built `index.html` in production.
 
 ### Preload
 
-`src/preload/index.ts` exposes exactly three functions:
+`src/preload/index.ts` exposes five functions:
 
 ```ts
 contextBridge.exposeInMainWorld('fileApi', {
   getHomeDir: (): Promise<string> => ipcRenderer.invoke('fs:getHomeDir'),
-  readDir: (dirPath: string): Promise<DirResult> => ipcRenderer.invoke('fs:readDir', dirPath),
-  openPath: (filePath: string): Promise<void> => ipcRenderer.invoke('shell:openPath', filePath)
+  readDir: (dirPath: string, showHidden: boolean): Promise<DirResult> =>
+    ipcRenderer.invoke('fs:readDir', dirPath, showHidden),
+  openPath: (filePath: string): Promise<void> => ipcRenderer.invoke('shell:openPath', filePath),
+  getAccentColor: (): Promise<string | null> => ipcRenderer.invoke('system:getAccentColor'),
+  onAccentColorChanged: (callback: (color: string | null) => void): (() => void) => {
+    const listener = (_event: unknown, color: string | null) => callback(color)
+    ipcRenderer.on('system:accent-changed', listener)
+    return () => ipcRenderer.removeListener('system:accent-changed', listener)
+  }
 })
 ```
 
-It never exposes `ipcRenderer` itself. The renderer can only call these three operations — it cannot invent new IPC channels or reach Node APIs. `src/preload/index.d.ts` declares this shape as `Window.fileApi`, so the renderer gets autocomplete and compile-time checking on the bridge.
+It never exposes `ipcRenderer` itself. The renderer can only call these five operations — it cannot invent new IPC channels or reach Node APIs. `onAccentColorChanged` is the one push-based API: it wraps `ipcRenderer.on` and hands back only an unsubscribe function. `src/preload/index.d.ts` declares this shape as `Window.fileApi`, so the renderer gets autocomplete and compile-time checking on the bridge.
 
 ### Renderer
 
@@ -77,11 +85,15 @@ Because all three read the same interface, changing a field in the main process 
 
 ## IPC channels
 
-| Channel          | Direction       | Input                                       | Returns                      |
-| ---------------- | --------------- | ------------------------------------------- | ---------------------------- |
-| `fs:getHomeDir`  | Renderer → Main | none                                        | The user's home folder path  |
-| `fs:readDir`     | Renderer → Main | Absolute folder path + `showHidden` boolean | `{ path, parent, items }`    |
-| `shell:openPath` | Renderer → Main | Absolute file path                          | Nothing, or an error message |
+| Channel                 | Direction       | Input                                       | Returns                                             |
+| ----------------------- | --------------- | ------------------------------------------- | --------------------------------------------------- |
+| `fs:getHomeDir`         | Renderer → Main | none                                        | The user's home folder path                         |
+| `fs:readDir`            | Renderer → Main | Absolute folder path + `showHidden` boolean | `{ path, parent, items }`                           |
+| `shell:openPath`        | Renderer → Main | Absolute file path                          | Nothing, or an error message                        |
+| `system:getAccentColor` | Renderer → Main | none                                        | `#RRGGBB` or `null` on non-macOS                    |
+| `system:accent-changed` | Main → Renderer | Accent colour or `null`                     | Delivered via `window.fileApi.onAccentColorChanged` |
+
+`system:getAccentColor` is called once on mount to seed the renderer. Live changes use the one main → renderer channel: on macOS the main process subscribes to `AppleAquaColorVariantChanged`, `AppleColorPreferencesChangedNotification`, and `AppleInterfaceThemeChangedNotification`, then re-reads the accent **100 ms later** (the notification can arrive before macOS has written the new value) and pushes it only if it differs from the last value sent. Electron's `accent-color-changed` event is Windows/Linux only, so it cannot be used on macOS.
 
 `fs:readDir` rejects with `Invalid folder path` if the argument is not a string or is not absolute, and with `Invalid showHidden flag` if the second argument is not a boolean. Hidden entries (names starting with `.`) are filtered out before `fs.stat` when `showHidden` is false. `shell:openPath` rejects with `Invalid file path` for the same path checks, or with the OS error message if the file cannot be opened (for example, no application is associated with the file).
 
@@ -159,17 +171,18 @@ sequenceDiagram
 
 All state lives in `App.tsx`:
 
-| State         | Purpose                                                                                                   |
-| ------------- | --------------------------------------------------------------------------------------------------------- |
-| `currentPath` | Folder currently displayed                                                                                |
-| `parentPath`  | Parent folder, or `null` at the file-system root                                                          |
-| `history`     | Array of previously visited paths for the Back button                                                     |
-| `items`       | Entries in the current folder                                                                             |
-| `selected`    | The selected item object, or `null`                                                                       |
-| `loading`     | Whether a folder request is in flight                                                                     |
-| `error`       | Error message to display                                                                                  |
-| `showHidden`  | Whether dot-prefixed entries are included; also an effect dependency for reloading                        |
-| `themeFamily` | `'default'` or `'catppuccin'`, persisted in `localStorage` and written to `data-theme-family` on `<html>` |
+| State          | Purpose                                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------------------- |
+| `currentPath`  | Folder currently displayed                                                                                |
+| `parentPath`   | Parent folder, or `null` at the file-system root                                                          |
+| `history`      | Array of previously visited paths for the Back button                                                     |
+| `items`        | Entries in the current folder                                                                             |
+| `selected`     | The selected item object, or `null`                                                                       |
+| `loading`      | Whether a folder request is in flight                                                                     |
+| `error`        | Error message to display                                                                                  |
+| `showHidden`   | Whether dot-prefixed entries are included; also an effect dependency for reloading                        |
+| `themeFamily`  | `'default'` or `'catppuccin'`, persisted in `localStorage` and written to `data-theme-family` on `<html>` |
+| `systemAccent` | Last accent reported by macOS, or `null`; written to `--accent-source` on `<html>`                        |
 
 Child components are intentionally stateless. This keeps the data flow one-directional and makes it obvious where a bug lives: if the UI is wrong, check the props `App` passed down.
 

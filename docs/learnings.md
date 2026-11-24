@@ -119,6 +119,16 @@ The important distinction: **Finder is a file manager, not the default handler f
 
 The hidden-files toggle filters `entry.name.startsWith('.')` **before** calling `fs.stat`, so hidden entries cost no metadata calls. That is the POSIX definition of hidden; Windows also has a hidden file attribute that Node's `fs` API does not expose directly, so a Windows-hidden file without a leading dot would still be listed. The app is macOS-first, so the limitation is documented rather than solved.
 
+### macOS accent sync needs a notification, not CSS
+
+Light/dark mode needs no app code because Chromium watches macOS appearance and `prefers-color-scheme` updates. There is no equivalent for the accent colour: CSS cannot read it, so the main process has to detect the change and push it over IPC.
+
+Electron's `accent-color-changed` event is Windows/Linux only. On macOS the useful signal is the distributed notification `AppleAquaColorVariantChanged`; I also listen for `AppleColorPreferencesChangedNotification` and `AppleInterfaceThemeChangedNotification` because System Settings does not post the same one for every change. My first attempt used only `AppleColorPreferencesChangedNotification`, so nothing happened until the app was restarted — which is exactly why it looked like the accent only applied after a refresh.
+
+There is also a race: the notification can arrive before macOS has written the new value. Reading immediately produced a colour that was one click behind. Reading once, 100 ms after the notification, fixed it. A `lastAccent` comparison in the main process stops duplicate notifications from causing needless renderer updates.
+
+`app.setName()` does **not** change the Dock tooltip. Electron documents it as overriding the name used internally, not the name the OS uses. In development the Dock label comes from `Electron.app`'s `Info.plist`, so it says "Electron"; the packaged app has its own `Info.plist` and shows "FileManager". This is a dev-only quirk, not a packaging bug.
+
 ### Not every icon location is the packaged icon
 
 `resources/icon.png` is only the runtime icon (Linux window icon, and the dev Dock icon via `app.dock.setIcon`). The icon Finder shows for the packaged app comes from `build/icon.png`, which electron-builder converts into `Contents/Resources/icon.icns`. Changing only `resources/icon.png` therefore does nothing to the built app. A 1024×1024 `build/icon.png` is the single master; the stale `build/icon.icns` and `build/icon.ico` have to be removed so electron-builder regenerates them.
@@ -303,6 +313,12 @@ Nesting with `&` is convenient but easy to overuse. Limiting it to block, elemen
 The palette toggle writes `data-theme-family` on `<html>` from a `useEffect` and saves the choice in `localStorage`. The stylesheet can then use `:root[data-theme-family='catppuccin']`, which is more specific than `:root` and wins regardless of source order. Light vs dark stays in `@media (prefers-color-scheme: dark)` **inside each family**, so switching the OS appearance needs no JavaScript.
 
 The string is repeated in four places: the `ThemeFamily` union, the `localStorage` value, and two CSS attribute selectors. When it was misspelled consistently in all of them, TypeScript, ESLint, Sass, and the app itself all passed — the only visible symptom was a misspelled button label. The fix is to keep magic strings in one shared definition (here, `ThemeFamily`) and copy the _exact_ value everywhere else. A compiler cannot catch a string that is wrong everywhere.
+
+### A custom property is not an attribute
+
+The accent mapping was initially gated on `:root[data-accent-source]`, but the renderer only did `root.style.setProperty('--accent-source', color)`. An inline CSS custom property does not create an HTML attribute, so the selector never matched and the selected row stayed blue. The fix was to also write `root.dataset.accentSource = 'true'`. Attribute selectors and custom properties are separate systems, even when their names look related.
+
+The same block originally mixed up the two `color-mix()` ratios: an 88% accent made the selected row almost solid, while the focus ring should have been the strongly tinted one. The selected row needs a subtle ~18% tint mixed with the background; the ring needs the higher-contrast mix mixed with the text colour.
 
 ## What I would do differently
 
