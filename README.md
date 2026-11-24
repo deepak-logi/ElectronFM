@@ -225,4 +225,4 @@ Builds are currently **unsigned** and **not notarized**. Locally built apps run 
 - [`docs/architecture.md`](docs/architecture.md) — process model, IPC channels, and request walkthroughs.
 - [`docs/styling.md`](docs/styling.md) — SCSS structure, design tokens, theming, and conventions.
 - [`docs/learnings.md`](docs/learnings.md) — what was learned, bugs hit, and open questions.
-- [`docs/screenshots/`](docs/screenshots/README.md) — screenshots used in this README and the demo, with regeneration instructions.
+- [`docs/screenshots/`](docs/screenshots/) — screenshots used in this README and the demo
