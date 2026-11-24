@@ -187,11 +187,30 @@ The lesson: read the rule name and the file before assuming the app is broken.
 
 Adding `editor.formatOnSave` plus Prettier and `source.fixAll.eslint` means formatting and auto-fixable lint issues never accumulate.
 
+### `npm i D <pkg>` installs a package called `D`
+
+A typo for `npm i -D <pkg>` added a real dependency named `D` to `package.json`. It never failed, because a package with that name exists on the registry. The lesson is to read the diff of `package.json` after installing anything — a stray production dependency would also have been bundled into the packaged app.
+
 ## TypeScript migration
 
 ### Renaming files is not the same as typing them
 
-Renaming `.jsx` to `.tsx` compiled cleanly even though every component still had untyped props. The shared toolkit config sets `strict: true` but also `noImplicitAny: false`, so every unannotated prop and handler parameter silently became `any`. I ran the checker once with `--noImplicitAny` forced on, which found exactly the two remaining untyped functions in `App.tsx`. All four components now have explicit prop interfaces.
+Renaming `.jsx` to `.tsx` compiled cleanly even though every component still had untyped props. The shared toolkit config sets `strict: true` but also `noImplicitAny: false`, so every unannotated prop and handler parameter silently became `any`. I ran the checker once with `--noImplicitAny` forced on, which found exactly the two remaining untyped functions in `App.tsx`. All four components now have explicit prop interfaces, and `noImplicitAny` is enabled in both project configs.
+
+### IPC input is `unknown`, not whatever the renderer sent
+
+Handler parameters are typed `unknown` and narrowed by validation:
+
+```ts
+ipcMain.handle('fs:readDir', async (_event, dirPath: unknown): Promise<DirResult> => {
+  if (typeof dirPath !== 'string' || !path.isAbsolute(dirPath)) {
+    throw new Error('Invalid folder path')
+  }
+  // dirPath is string from here on
+})
+```
+
+Typing the parameter as `string` would document an intention, not a guarantee — the value crosses a process boundary and could be anything. `unknown` forces the validation that was already there to be the thing that produces the type. The same applies to promise rejections: annotating a `.catch` parameter as `Error` is a claim, so I use `err: unknown` plus `err instanceof Error` instead.
 
 ### `filter(Boolean)` does not narrow types
 
@@ -240,6 +259,41 @@ Enabling `allowJs` for a gradual migration caused five `TS5055: Cannot write fil
 
 electron-vite transpiles TypeScript through esbuild without checking types, so `npm run build` succeeding says nothing about type correctness. `npm run typecheck` is the gate. Same story for `src/renderer/index.html`: after renaming `main.jsx` to `main.tsx`, the HTML script tag still pointed at the old path, which neither TypeScript nor ESLint sees. Only a real build/dev run catches that.
 
+## SCSS and styling
+
+### `@use` is scoped, `@import` is not
+
+With `@import`, every variable and mixin ended up in one global namespace and the same file could be imported twice. `@use` loads a file once and keeps its names local, so each partial that needs `space()` or a mixin says so explicitly:
+
+```scss
+@use '../abstracts' as *;
+```
+
+`abstracts/_index.scss` forwards the three abstract files, so components have a single import path. `@import` is deprecated, and mixing the two in one project causes confusing duplicate-output errors.
+
+### Colors must be CSS variables; spacing can stay Sass
+
+This was the least obvious part. A Sass variable is replaced by its value at build time, so it cannot change when the user switches appearance. Theme colors therefore live in `:root` as custom properties and are overridden inside `@media (prefers-color-scheme: dark)`. Spacing, radii, and layout sizes never change at runtime, so they stay as Sass variables exposed through `space()`.
+
+The rule I settled on: **if it changes between light and dark, it is a custom property; if it is a fixed design value, it is a Sass variable.**
+
+### A dynamic icon component tripped a React Hooks lint rule
+
+`FileItem` originally did:
+
+```tsx
+const Icon = getFileIcon(item)
+return <Icon size={18} />
+```
+
+`react-hooks/static-components` flags a component variable created during render, because a new component identity each render can remount the subtree. Here the value is actually a stable module-level lucide component, so the warning is conservative — but rather than disable the rule, I render it with `createElement(getFileIcon(item), props)`. Same output, no component variable in the render path.
+
+Two related details: `lucide-react` tree-shakes correctly (unused icons are absent from the production bundle), and `aria-hidden` on the icon keeps screen readers from announcing decorative SVGs.
+
+### BEM keeps the nesting shallow
+
+Nesting with `&` is convenient but easy to overuse. Limiting it to block, element, and modifier (`file-item`, `&__name`, `&--selected`) means every selector stays at most two classes deep, which keeps specificity flat and makes styles easy to grep from the JSX.
+
 ## What I would do differently
 
 1. **Write the props contract before the component.** A small table of prop names, types, and purpose would have prevented the Toolbar signature bug.
@@ -261,5 +315,7 @@ electron-vite transpiles TypeScript through esbuild without checking types, so `
 - What is the cleanest way to add code signing and notarization to a CI pipeline?
 - What is worth testing first: the IPC handlers, the React components, or both?
 - Should hidden files be hidden by default, with a toggle, instead of always shown?
-- Should `noImplicitAny` be enabled now, and should `typecheck` run in a pre-commit hook or CI?
+- Should `typecheck` and `lint` run in a pre-commit hook or CI?
 - Should the shared `FileEntry` type live in `src/shared` or be generated from the IPC schema?
+- Would CSS Modules scale better than global BEM once the component count grows?
+- Should breadcrumbs be built in the main process (where `path` is available) or derived in React?

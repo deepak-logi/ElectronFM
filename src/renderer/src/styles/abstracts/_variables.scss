@@ -1,0 +1,26 @@
+// Compile-time design values: spacing, radii, layout sizes and type stacks.
+$space-scale: (
+  1: 4px,
+  2: 8px,
+  3: 12px,
+  4: 16px,
+  5: 20px,
+  6: 24px,
+  8: 32px
+);
+
+$radius-sm: 4px;
+$radius-md: 8px;
+
+$toolbar-height: 52px;
+$details-width: 300px;
+
+$font-stack:
+  system-ui,
+  -apple-system,
+  'Segoe UI',
+  Roboto,
+  sans-serif;
+$font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+$transition-fast: 120ms ease;

@@ -44,7 +44,8 @@ The renderer is a normal React app:
 
 - `App.tsx` owns all application state and the data-loading effect.
 - `Toolbar`, `FileList`, `FileItem`, and `DetailsPanel` are presentational components with typed prop interfaces that receive props and report events.
-- `utils/format.ts` contains pure formatting helpers.
+- `utils/format.ts` contains pure formatting helpers, and `utils/fileIcons.ts` maps a `FileEntry` to a lucide icon.
+- `styles/` holds the SCSS structure; `main.scss` is the only stylesheet React imports. See [`styling.md`](styling.md).
 
 ## TypeScript layout
 
@@ -59,9 +60,19 @@ The source is TypeScript end to end. electron-vite transpiles it with esbuild, s
 | `src/preload/index.d.ts`    | Global declaration for `window.fileApi`                                                                    |
 | `src/renderer/src/env.d.ts` | Vite client types                                                                                          |
 
-`allowJs` is enabled with `checkJs: false`, so any remaining `.js`/`.jsx` file still resolves during a gradual migration without being reported on. Each project has an `outDir` under `node_modules/.tmp` because `composite: true` implies emit; without it, TypeScript would try to overwrite the `.js` source files that `allowJs` pulls in.
+Each project has an `outDir` under `node_modules/.tmp` because `composite: true` implies emit. Without it, TypeScript would try to write output over source files (the node project keeps `allowJs` so `electron.vite.config.mjs` is included).
 
-`strict` is on, but `noImplicitAny` is still `false` in the shared toolkit base. Props and handler parameters are annotated explicitly today, so no implicit `any`s remain — enabling that flag is the next hardening step.
+`strict` is on and `noImplicitAny` is enabled explicitly in both project configs — the shared `@electron-toolkit/tsconfig` base turns it off, so it has to be repeated per project. IPC handler arguments are typed `unknown`, because they arrive from the renderer and cannot be trusted; the `typeof` and `path.isAbsolute` checks then narrow them.
+
+### Shared types
+
+`src/shared/types.ts` is the IPC contract. It defines `FileEntry` (one row in the list) and `DirResult` (what `fs:readDir` returns). It is imported by:
+
+- `src/main/index.ts`, which builds the objects and annotates the handler return type.
+- `src/preload/index.ts`, which types the bridge functions.
+- `src/renderer/src/App.tsx` and the components, which consume the data.
+
+Because all three read the same interface, changing a field in the main process makes the renderer fail to compile instead of failing at runtime. Neither tsconfig owns the file exclusively: both project `include` arrays list `src/shared/**/*`.
 
 ## IPC channels
 

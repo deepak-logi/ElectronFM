@@ -1,0 +1,11 @@
+@use 'sass:map';
+@use 'variables' as *;
+
+// space(2) -> 8px. Fails loudly instead of silently returning null.
+@function space($key) {
+  @if not map.has-key($space-scale, $key) {
+    @error "Unknown spacing key: #{$key}";
+  }
+
+  @return map.get($space-scale, $key);
+}

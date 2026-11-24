@@ -1,0 +1,39 @@
+@use '../abstracts' as *;
+
+.details-panel {
+  padding: space(5);
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+
+  &__name {
+    margin: 0 0 space(4);
+    font-size: 16px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  &__list {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: space(2) space(4);
+
+    dt {
+      color: var(--color-text-muted);
+    }
+
+    dd {
+      min-width: 0;
+    }
+  }
+
+  &__path {
+    font-family: $font-mono;
+    font-size: 12px;
+    word-break: break-all;
+  }
+
+  &__empty {
+    color: var(--color-text-muted);
+  }
+}

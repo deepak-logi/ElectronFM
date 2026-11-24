@@ -1,0 +1,18 @@
+@use '../abstracts' as *;
+
+.app {
+  display: grid;
+  grid-template-rows: $toolbar-height 1fr;
+  height: 100vh;
+}
+
+.content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) $details-width;
+  min-height: 0;
+
+  &__main {
+    overflow-y: auto;
+    min-height: 0;
+  }
+}

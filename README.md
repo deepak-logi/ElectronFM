@@ -21,6 +21,8 @@ A small desktop file manager built with Electron and React. It browses the local
 - **Back** button with navigation history.
 - Click a file to see its details: name, type, size, last modified, and full path.
 - Double-click a file to open it in the operating system's default application.
+- File-type icons, hover, selected, and keyboard focus states.
+- Automatic light/dark theme that follows the operating system.
 - Loading, error, and empty-folder states.
 
 **Not implemented (out of scope for this build)**
@@ -41,6 +43,8 @@ A small desktop file manager built with Electron and React. It browses the local
 | Main process  | Node.js `fs/promises`, `path`, `os`, `electron.shell` |
 | Secure bridge | Preload script + `contextBridge`                      |
 | UI            | React 19 + Vite 8                                     |
+| Styling       | SCSS (Sass) with BEM and CSS custom properties        |
+| Icons         | lucide-react                                          |
 | Build tooling | electron-vite 6, electron-builder 26                  |
 | Code quality  | ESLint 9 (+ `typescript-eslint`), Prettier 3          |
 
@@ -108,8 +112,14 @@ file-manager/
 │           │   ├── FileItem.tsx
 │           │   └── DetailsPanel.tsx
 │           ├── utils/
-│           │   └── format.ts # File size and date formatting
-│           └── assets/       # Global CSS and icons
+│           │   ├── format.ts    # File size and date formatting
+│           │   └── fileIcons.ts # Extension → lucide icon mapping
+│           └── styles/
+│               ├── main.scss    # The only stylesheet React imports
+│               ├── abstracts/   # Variables, functions, mixins
+│               ├── base/        # Reset, theme tokens, typography
+│               ├── layout/      # App shell grid
+│               └── components/  # Toolbar, list, item, details, states
 ├── build/                    # App icons and macOS entitlements
 ├── docs/
 │   ├── architecture.md
@@ -149,15 +159,26 @@ npm run typecheck
 Two details are worth knowing:
 
 - **`npm run build` does not type-check.** It transpiles with esbuild. Run `npm run typecheck` before shipping.
-- **`noImplicitAny` is currently `false`** (from `@electron-toolkit/tsconfig`). All props and handlers are annotated explicitly, so no implicit `any`s remain today, but the checker will not catch a new one until that flag is enabled.
+- **`noImplicitAny` is explicitly enabled** in both project configs. The shared `@electron-toolkit/tsconfig` base turns it off, so it has to be set per project. IPC arguments are typed `unknown` and narrowed by the `typeof` / `path.isAbsolute` checks.
 
 `react/prop-types` is deliberately off: TypeScript's prop interfaces replace runtime PropTypes entirely.
+
+## Styling
+
+The template CSS has been replaced by an SCSS structure under `src/renderer/src/styles/`. React imports a single entry point, `styles/main.scss`, which pulls in the rest with `@use`.
+
+- **BEM class names** — `file-item`, `file-item--selected`, `details-panel__name`.
+- **Sass for compile-time values** — the spacing scale, radii, and layout sizes (`space(3)`, `$toolbar-height`).
+- **CSS custom properties for colors** — they survive the build and switch under `@media (prefers-color-scheme: dark)`.
+- **CSS Grid layout** — toolbar across the top, file list on the left, details panel on the right, each scrolling independently.
+
+The full conventions and folder guide are in [`docs/styling.md`](docs/styling.md).
 
 ## Security decisions
 
 - **Context isolation stays on** (Electron's default) and **Node integration stays off**, so renderer code cannot access Node or Electron internals directly.
 - The preload exposes **only three named functions** (`getHomeDir`, `readDir`, `openPath`) instead of exposing `ipcRenderer` itself. Their signatures are declared in `src/preload/index.d.ts`.
-- Both IPC handlers **validate input** before using a path: it must be a string and an absolute path. `fs:readDir` rejects with `Invalid folder path`, `shell:openPath` with `Invalid file path`.
+- Both IPC handlers **validate input** before using a path: the argument is typed `unknown`, then narrowed to a string and checked with `path.isAbsolute`. `fs:readDir` rejects with `Invalid folder path`, `shell:openPath` with `Invalid file path`.
 - File system access uses **async `fs/promises`**, so the UI never freezes on slow folders.
 - The `remote` module is not used; all communication goes through `ipcMain.handle` / `ipcRenderer.invoke`.
 - `sandbox: false` is kept from the electron-vite template so the preload bundle can use Node imports. This is a known trade-off and a candidate for future hardening.
@@ -182,24 +203,26 @@ Builds are currently **unsigned** and **not notarized**. Locally built apps run 
 - Symlinked directories are followed for navigation, but symlink loops are not specially handled.
 - Permission errors are shown as an error message; there is no retry button.
 - No automated tests yet.
-- Type errors are only reported by `npm run typecheck`, not by `npm run build`; `noImplicitAny` is still off.
+- Type errors are only reported by `npm run typecheck`, not by `npm run build`.
 - Only macOS has been tested.
 - The packaged app is unsigned.
 
 ## Next steps
 
 - Search/filter in the current folder.
-- Sort by name, size, or date.
+- Sort by name, size, or date, plus a Name / Size / Modified header row.
+- Clickable breadcrumb path, built with `path.dirname` in the main process.
 - Create folder.
 - Keyboard navigation and shortcuts.
 - "Reveal in Finder" using `shell.showItemInFolder`.
 - Virtualized file list for huge folders.
 - Automated tests for the main-process handlers and React components.
-- Enable `noImplicitAny` and add `typecheck` to a CI pipeline.
+- Add `typecheck` and `lint` to a CI pipeline.
 - CI builds for macOS, Windows, and Linux, with code signing and notarization.
 
 ## Documentation
 
 - [`docs/architecture.md`](docs/architecture.md) — process model, IPC channels, and request walkthroughs.
+- [`docs/styling.md`](docs/styling.md) — SCSS structure, design tokens, theming, and conventions.
 - [`docs/learnings.md`](docs/learnings.md) — what was learned, bugs hit, and open questions.
 - [`docs/screenshots/`](docs/screenshots/README.md) — screenshots used in this README and the demo, with regeneration instructions.

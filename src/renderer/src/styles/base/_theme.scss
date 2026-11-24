@@ -1,0 +1,32 @@
+// Colors are CSS custom properties so they can switch at runtime with the OS theme.
+:root {
+  color-scheme: light dark;
+
+  --color-bg: #ffffff;
+  --color-surface: #f6f7f9;
+  --color-border: #e3e5e8;
+  --color-text: #1f2328;
+  --color-text-muted: #656d76;
+  --color-hover: #eef1f4;
+  --color-selected: #dbeafe;
+  --color-accent: #2563eb;
+  --color-folder: #e0a800;
+  --color-danger: #cf222e;
+  --color-danger-bg: #ffebe9;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #16181d;
+    --color-surface: #1e2128;
+    --color-border: #2d313a;
+    --color-text: #e6e8eb;
+    --color-text-muted: #9aa1ab;
+    --color-hover: #262a33;
+    --color-selected: #1e3a5f;
+    --color-accent: #4f8cff;
+    --color-folder: #f2c94c;
+    --color-danger: #ff7b72;
+    --color-danger-bg: #3a1d1d;
+  }
+}

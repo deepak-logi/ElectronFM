@@ -6,9 +6,9 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import type { DirResult, FileEntry } from '../shared/types'
 
-ipcMain.handle('fs:getHomeDir', () => os.homedir())
+ipcMain.handle('fs:getHomeDir', (): string => os.homedir())
 
-ipcMain.handle('fs:readDir', async (_event, dirPath): Promise<DirResult> => {
+ipcMain.handle('fs:readDir', async (_event, dirPath: unknown): Promise<DirResult> => {
   // force returned obj to DirResult type
   if (typeof dirPath !== 'string' || !path.isAbsolute(dirPath)) {
     throw new Error('Invalid folder path')
@@ -43,7 +43,7 @@ ipcMain.handle('fs:readDir', async (_event, dirPath): Promise<DirResult> => {
   return { path: dirPath, parent: parent !== dirPath ? parent : null, items: sorted }
 })
 
-ipcMain.handle('shell:openPath', async (_event, filePath) => {
+ipcMain.handle('shell:openPath', async (_event, filePath: unknown): Promise<void> => {
   if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) {
     throw new Error('Invalid file path')
   }
@@ -101,9 +101,6 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
-
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
 
   createWindow()
 

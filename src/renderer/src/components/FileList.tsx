@@ -9,11 +9,11 @@ interface FileListProps {
 }
 
 export default function FileList({ items, selected, onSelect, onOpen }: FileListProps) {
-  if (items.length === 0) return <p>This folder is empty.</p>
+  if (items.length === 0) return <p className="state">This folder is empty.</p>
 
   return (
-    <ul className="file-list">
-      {items.map((item: FileEntry) => (
+    <ul className="file-list" role="listbox">
+      {items.map((item) => (
         <FileItem
           key={item.path}
           item={item}

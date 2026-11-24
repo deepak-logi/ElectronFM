@@ -7,7 +7,11 @@ interface DetailsPanelProps {
 
 export default function DetailsPanel({ item }: DetailsPanelProps) {
   if (!item) {
-    return <aside className="details-panel">Select a file to see its details.</aside>
+    return (
+      <aside className="details-panel">
+        <p className="details-panel__empty">Select a file to see its details.</p>
+      </aside>
+    )
   }
 
   const type = item.isDirectory
@@ -18,8 +22,8 @@ export default function DetailsPanel({ item }: DetailsPanelProps) {
 
   return (
     <aside className="details-panel">
-      <h2 className="details-name">{item.name}</h2>
-      <dl className="details-list">
+      <h2 className="details-panel__name">{item.name}</h2>
+      <dl className="details-panel__list">
         <dt>Type</dt>
         <dd>{type}</dd>
 
@@ -27,10 +31,10 @@ export default function DetailsPanel({ item }: DetailsPanelProps) {
         <dd>{item.isDirectory ? '-' : formatSize(item.size)}</dd>
 
         <dt>Modified</dt>
-        <dd>{formatDate(Number(item.modified))}</dd>
+        <dd>{formatDate(item.modified)}</dd>
 
         <dt>Path</dt>
-        <dd className="details-path" title={item.path}>
+        <dd className="details-panel__path" title={item.path}>
           {item.path}
         </dd>
       </dl>

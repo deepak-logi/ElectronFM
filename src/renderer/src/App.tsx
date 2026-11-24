@@ -34,7 +34,10 @@ export default function App() {
         setItems(result.items)
         setParentPath(result.parent)
       })
-      .catch((err) => !cancelled && setError(err instanceof Error ? err.message : 'Unknown error'))
+      .catch(
+        (err: unknown) =>
+          !cancelled && setError(err instanceof Error ? err.message : 'Unknown error')
+      )
       .finally(() => !cancelled && setLoading(false))
 
     return () => {
@@ -59,7 +62,7 @@ export default function App() {
     else
       window.fileApi
         .openPath(item.path)
-        .catch((err) => setError(err instanceof Error ? err.message : 'Unknown error'))
+        .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Unknown error'))
   }
 
   return (
@@ -73,11 +76,22 @@ export default function App() {
       />
 
       <main className="content">
-        {loading && <p>Loading</p>}
-        {error && <p className="error">{error}</p>}
-        {!loading && !error && (
-          <FileList items={items} selected={selected} onSelect={setSelected} onOpen={handleOpen} />
-        )}
+        <section className="content__main">
+          {loading && <p className="state">Loading…</p>}
+          {error && (
+            <p className="state state--error" role="alert">
+              {error}
+            </p>
+          )}
+          {!loading && !error && (
+            <FileList
+              items={items}
+              selected={selected}
+              onSelect={setSelected}
+              onOpen={handleOpen}
+            />
+          )}
+        </section>
         <DetailsPanel item={selected} />
       </main>
     </div>

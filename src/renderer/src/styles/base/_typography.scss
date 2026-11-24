@@ -1,0 +1,10 @@
+@use '../abstracts' as *;
+
+body {
+  font-family: $font-stack;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+}

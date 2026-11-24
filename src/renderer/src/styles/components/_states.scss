@@ -1,0 +1,16 @@
+@use '../abstracts' as *;
+
+.state {
+  @include flex-center(space(2));
+  padding: space(8) space(4);
+  color: var(--color-text-muted);
+  text-align: center;
+
+  &--error {
+    margin: space(4);
+    padding: space(4);
+    border-radius: $radius-md;
+    color: var(--color-danger);
+    background: var(--color-danger-bg);
+  }
+}

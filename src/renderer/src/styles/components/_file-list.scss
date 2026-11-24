@@ -1,0 +1,8 @@
+@use '../abstracts' as *;
+
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: space(2);
+}
