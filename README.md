@@ -22,7 +22,8 @@ A small desktop file manager built with Electron and React. It browses the local
 - Click a file to see its details: name, type, size, last modified, and full path.
 - Double-click a file to open it in the operating system's default application.
 - File-type icons, hover, selected, and keyboard focus states.
-- Automatic light/dark theme that follows the operating system.
+- Show/hide hidden files (dot-prefixed names) with a toolbar toggle.
+- Switch between the default palette and Catppuccin; the OS still decides light or dark (Latte / Mocha).
 - Loading, error, and empty-folder states.
 
 **Not implemented (out of scope for this build)**
@@ -30,7 +31,6 @@ A small desktop file manager built with Electron and React. It browses the local
 - Search / filter
 - Sorting by name, size, or date
 - Create folder
-- Show/hide hidden files toggle (hidden files are currently always shown)
 - Delete, rename, drag-and-drop, multiple tabs
 - Multi-select
 
@@ -152,7 +152,7 @@ npm run typecheck
 | `tsconfig.node.json`        | Main + preload + `electron.vite.config.mjs`; includes Node globals and electron-vite's `?asset` module types |
 | `tsconfig.web.json`         | Renderer; DOM types, `react-jsx`, and the `@renderer/*` path alias to `src/renderer/src`                     |
 | `tsconfig.json`             | Solution file referencing both projects so editors can use them together                                     |
-| `src/shared/types.ts`       | `FileEntry` and `DirResult`, imported by the main process, preload, and renderer                             |
+| `src/shared/types.ts`       | `FileEntry`, `DirResult`, and `ThemeFamily`, imported by the main process, preload, and renderer             |
 | `src/preload/index.d.ts`    | Declares the three functions on `window.fileApi` for the renderer                                            |
 | `src/renderer/src/env.d.ts` | Vite client types                                                                                            |
 
@@ -170,6 +170,7 @@ The template CSS has been replaced by an SCSS structure under `src/renderer/src/
 - **BEM class names** — `file-item`, `file-item--selected`, `details-panel__name`.
 - **Sass for compile-time values** — the spacing scale, radii, and layout sizes (`space(3)`, `$toolbar-height`).
 - **CSS custom properties for colors** — they survive the build and switch under `@media (prefers-color-scheme: dark)`.
+- **Two theme families** — the toolbar toggle writes `data-theme-family` on `<html>` and persists it in `localStorage`; within each family the OS still decides light vs dark. Catppuccin uses Latte for light and Mocha for dark.
 - **CSS Grid layout** — toolbar across the top, file list on the left, details panel on the right, each scrolling independently.
 
 The full conventions and folder guide are in [`docs/styling.md`](docs/styling.md).
@@ -197,7 +198,8 @@ Builds are currently **unsigned** and **not notarized**. Locally built apps run 
 
 ## Known limitations
 
-- No search, filter, sort, or hidden-file toggle.
+- No search, filter, or sort.
+- Hidden-file filtering is dot-prefix based (the POSIX definition), so Windows hidden attributes are not detected.
 - No delete, rename, drag-and-drop, or tabs.
 - Large folders are read with one `fs.stat` per entry and rendered without virtualization, so very large directories may feel slow.
 - Symlinked directories are followed for navigation, but symlink loops are not specially handled.

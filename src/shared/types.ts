@@ -15,3 +15,5 @@ export interface DirResult {
   parent: string | null
   items: FileEntry[]
 }
+
+export type ThemeFamily = 'default' | 'catppuccin'

@@ -46,6 +46,7 @@ The renderer is a normal React app:
 - `Toolbar`, `FileList`, `FileItem`, and `DetailsPanel` are presentational components with typed prop interfaces that receive props and report events.
 - `utils/format.ts` contains pure formatting helpers, and `utils/fileIcons.ts` maps a `FileEntry` to a lucide icon.
 - `styles/` holds the SCSS structure; `main.scss` is the only stylesheet React imports. See [`styling.md`](styling.md).
+- `Toolbar` hosts Back, Up, hidden-files, and theme-family buttons. All four states stay in `App.tsx`.
 
 ## TypeScript layout
 
@@ -66,7 +67,7 @@ Each project has an `outDir` under `node_modules/.tmp` because `composite: true`
 
 ### Shared types
 
-`src/shared/types.ts` is the IPC contract. It defines `FileEntry` (one row in the list) and `DirResult` (what `fs:readDir` returns). It is imported by:
+`src/shared/types.ts` is the IPC contract. It defines `FileEntry` (one row in the list), `DirResult` (what `fs:readDir` returns), and `ThemeFamily` (`'default' | 'catppuccin'`, a renderer-only type shared with `Toolbar`). It is imported by:
 
 - `src/main/index.ts`, which builds the objects and annotates the handler return type.
 - `src/preload/index.ts`, which types the bridge functions.
@@ -76,13 +77,13 @@ Because all three read the same interface, changing a field in the main process 
 
 ## IPC channels
 
-| Channel          | Direction       | Input                | Returns                      |
-| ---------------- | --------------- | -------------------- | ---------------------------- |
-| `fs:getHomeDir`  | Renderer → Main | none                 | The user's home folder path  |
-| `fs:readDir`     | Renderer → Main | Absolute folder path | `{ path, parent, items }`    |
-| `shell:openPath` | Renderer → Main | Absolute file path   | Nothing, or an error message |
+| Channel          | Direction       | Input                                       | Returns                      |
+| ---------------- | --------------- | ------------------------------------------- | ---------------------------- |
+| `fs:getHomeDir`  | Renderer → Main | none                                        | The user's home folder path  |
+| `fs:readDir`     | Renderer → Main | Absolute folder path + `showHidden` boolean | `{ path, parent, items }`    |
+| `shell:openPath` | Renderer → Main | Absolute file path                          | Nothing, or an error message |
 
-`fs:readDir` rejects with `Invalid folder path` if the argument is not a string or is not absolute. `shell:openPath` rejects with `Invalid file path` for the same checks, or with the OS error message if the file cannot be opened (for example, no application is associated with the file).
+`fs:readDir` rejects with `Invalid folder path` if the argument is not a string or is not absolute, and with `Invalid showHidden flag` if the second argument is not a boolean. Hidden entries (names starting with `.`) are filtered out before `fs.stat` when `showHidden` is false. `shell:openPath` rejects with `Invalid file path` for the same path checks, or with the OS error message if the file cannot be opened (for example, no application is associated with the file).
 
 ## The item data shape
 
@@ -104,9 +105,9 @@ Entries are sorted with **folders first**, then by name using `localeCompare`. E
 1. `FileItem` fires `onDoubleClick` and calls `onOpen(item)`.
 2. `App.handleOpen(item)` sees `item.isDirectory === true` and calls `navigateTo(item.path)`.
 3. `navigateTo` pushes the current path onto `history` and sets `currentPath` to the new folder.
-4. The `useEffect` that depends on `currentPath` runs. It marks the request as not cancelled, sets `loading`, clears the previous error and selection, and calls `window.fileApi.readDir(currentPath)`.
+4. The `useEffect` that depends on `currentPath` and `showHidden` runs. It marks the request as not cancelled, sets `loading`, clears the previous error and selection, and calls `window.fileApi.readDir(currentPath, showHidden)`.
 5. The preload calls `ipcRenderer.invoke('fs:readDir', currentPath)`.
-6. The main process validates the path, runs `fs.readdir(..., { withFileTypes: true })`, calls `fs.stat` for each entry, sorts the results, computes the parent path, and returns `{ path, parent, items }`.
+6. The main process validates the path and the boolean flag, runs `fs.readdir(..., { withFileTypes: true })`, skips dot-prefixed entries when hidden files are off, calls `fs.stat` for each remaining entry, sorts the results, computes the parent path, and returns `{ path, parent, items }`.
 7. Back in React, `setItems(result.items)` and `setParentPath(result.parent)` update the UI, and `loading` becomes `false`.
 8. `FileList` re-renders the new items. `DetailsPanel` continues to show its empty state, because selection was already cleared in step 4.
 
@@ -158,15 +159,17 @@ sequenceDiagram
 
 All state lives in `App.tsx`:
 
-| State         | Purpose                                               |
-| ------------- | ----------------------------------------------------- |
-| `currentPath` | Folder currently displayed                            |
-| `parentPath`  | Parent folder, or `null` at the file-system root      |
-| `history`     | Array of previously visited paths for the Back button |
-| `items`       | Entries in the current folder                         |
-| `selected`    | The selected item object, or `null`                   |
-| `loading`     | Whether a folder request is in flight                 |
-| `error`       | Error message to display                              |
+| State         | Purpose                                                                                                   |
+| ------------- | --------------------------------------------------------------------------------------------------------- |
+| `currentPath` | Folder currently displayed                                                                                |
+| `parentPath`  | Parent folder, or `null` at the file-system root                                                          |
+| `history`     | Array of previously visited paths for the Back button                                                     |
+| `items`       | Entries in the current folder                                                                             |
+| `selected`    | The selected item object, or `null`                                                                       |
+| `loading`     | Whether a folder request is in flight                                                                     |
+| `error`       | Error message to display                                                                                  |
+| `showHidden`  | Whether dot-prefixed entries are included; also an effect dependency for reloading                        |
+| `themeFamily` | `'default'` or `'catppuccin'`, persisted in `localStorage` and written to `data-theme-family` on `<html>` |
 
 Child components are intentionally stateless. This keeps the data flow one-directional and makes it obvious where a bug lives: if the UI is wrong, check the props `App` passed down.
 

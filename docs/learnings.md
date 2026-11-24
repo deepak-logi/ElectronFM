@@ -115,6 +115,10 @@ The important distinction: **Finder is a file manager, not the default handler f
 
 `fs.readdir(..., { withFileTypes: true })` returns `Dirent` objects. For a symlink, `entry.isDirectory()` is `false` even when the link points to a folder. Since I already call `fs.stat` (which follows links), using `stats.isDirectory()` makes symlinked folders navigable instead of sending them to `openPath`.
 
+### Hidden files are defined by a name convention
+
+The hidden-files toggle filters `entry.name.startsWith('.')` **before** calling `fs.stat`, so hidden entries cost no metadata calls. That is the POSIX definition of hidden; Windows also has a hidden file attribute that Node's `fs` API does not expose directly, so a Windows-hidden file without a leading dot would still be listed. The app is macOS-first, so the limitation is documented rather than solved.
+
 ### Not every icon location is the packaged icon
 
 `resources/icon.png` is only the runtime icon (Linux window icon, and the dev Dock icon via `app.dock.setIcon`). The icon Finder shows for the packaged app comes from `build/icon.png`, which electron-builder converts into `Contents/Resources/icon.icns`. Changing only `resources/icon.png` therefore does nothing to the built app. A 1024×1024 `build/icon.png` is the single master; the stale `build/icon.icns` and `build/icon.ico` have to be removed so electron-builder regenerates them.
@@ -294,6 +298,12 @@ Two related details: `lucide-react` tree-shakes correctly (unused icons are abse
 
 Nesting with `&` is convenient but easy to overuse. Limiting it to block, element, and modifier (`file-item`, `&__name`, `&--selected`) means every selector stays at most two classes deep, which keeps specificity flat and makes styles easy to grep from the JSX.
 
+### A theme toggle needs a persistent CSS hook
+
+The palette toggle writes `data-theme-family` on `<html>` from a `useEffect` and saves the choice in `localStorage`. The stylesheet can then use `:root[data-theme-family='catppuccin']`, which is more specific than `:root` and wins regardless of source order. Light vs dark stays in `@media (prefers-color-scheme: dark)` **inside each family**, so switching the OS appearance needs no JavaScript.
+
+The string is repeated in four places: the `ThemeFamily` union, the `localStorage` value, and two CSS attribute selectors. When it was misspelled consistently in all of them, TypeScript, ESLint, Sass, and the app itself all passed — the only visible symptom was a misspelled button label. The fix is to keep magic strings in one shared definition (here, `ThemeFamily`) and copy the _exact_ value everywhere else. A compiler cannot catch a string that is wrong everywhere.
+
 ## What I would do differently
 
 1. **Write the props contract before the component.** A small table of prop names, types, and purpose would have prevented the Toolbar signature bug.
@@ -314,7 +324,7 @@ Nesting with `&` is convenient but easy to overuse. Limiting it to block, elemen
 - How do Windows and Linux path handling differ from macOS in practice?
 - What is the cleanest way to add code signing and notarization to a CI pipeline?
 - What is worth testing first: the IPC handlers, the React components, or both?
-- Should hidden files be hidden by default, with a toggle, instead of always shown?
+- Should hidden-file detection also honour the Windows hidden attribute, not just the POSIX dot prefix?
 - Should `typecheck` and `lint` run in a pre-commit hook or CI?
 - Should the shared `FileEntry` type live in `src/shared` or be generated from the IPC schema?
 - Would CSS Modules scale better than global BEM once the component count grows?

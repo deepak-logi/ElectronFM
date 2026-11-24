@@ -24,7 +24,7 @@ styles/
 │   └── _mixins.scss       # truncate, focus-ring, flex-center
 ├── base/
 │   ├── _reset.scss
-│   ├── _theme.scss        # light + dark color tokens
+│   ├── _theme.scss        # default + Catppuccin token families
 │   └── _typography.scss
 ├── layout/
 │   └── _app.scss          # app shell grid
@@ -63,6 +63,38 @@ Partial files start with `_` so Sass never emits them on their own. `abstracts/_
   }
 }
 ```
+
+### Theme families
+
+There are two palettes, selected by a toolbar toggle. The choice is stored in `localStorage` under `fm-theme-family` and applied as an attribute on `<html>`:
+
+```ts
+document.documentElement.dataset.themeFamily = themeFamily
+```
+
+That writes `data-theme-family="default"` or `data-theme-family="catppuccin"`. The stylesheet has four token blocks:
+
+```scss
+:root {
+  /* default light */
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* default dark */
+  }
+}
+
+:root[data-theme-family='catppuccin'] {
+  /* Latte */
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme-family='catppuccin'] {
+    /* Mocha */
+  }
+}
+```
+
+The attribute selector is more specific than `:root`, so it wins in both appearances. The toggle never forces light or dark — the OS media query still decides whether a family renders its light or dark tokens. Catppuccin values come from the official v1.8.0 palette; `--color-danger-bg` is derived with `color-mix()` instead of an off-palette hex.
 
 **Spacing is a Sass map**, exposed through a function:
 
@@ -135,9 +167,10 @@ BEM here is deliberately shallow: block (`file-item`), element (`file-item__name
 - Every interactive row is keyboard reachable (`tabIndex={0}`) and opens on `Enter`.
 - `aria-selected` is paired with `role="listbox"` on the list and `role="option"` on the row, which is required for `aria-selected` to be valid.
 - Icon-only toolbar buttons carry `aria-label`; decorative icons use `aria-hidden`.
+- The hidden-files and theme toggles also use `aria-pressed`, so assistive tech can report their on/off state.
 - Focus is always visible through `:focus-visible`, so `outline` is never removed without a replacement.
 
 ## Notes
 
 - Web fonts are not used: the CSP blocks external requests, and the system stack renders instantly.
-- Theme switching is automatic only. There is no manual toggle.
+- Light vs dark is always automatic (`prefers-color-scheme`). The manual toggle switches palette _family_, not brightness.

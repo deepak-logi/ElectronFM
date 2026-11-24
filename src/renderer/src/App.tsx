@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Toolbar from './components/Toolbar'
 import FileList from './components/FileList'
 import DetailsPanel from './components/DetailsPanel'
-import type { FileEntry } from '../../shared/types'
+import type { FileEntry, ThemeFamily } from '../../shared/types'
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState('')
@@ -13,6 +13,17 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showHidden, setShowHidden] = useState(false)
+
+  const [themeFamily, setThemeFamily] = useState<ThemeFamily>(() => {
+    const saved = localStorage.getItem('fm-theme-family')
+    return saved === 'catppuccin' ? 'catppuccin' : 'default'
+  })
+  // lazy initializer -> runs only once on mount
+
+  useEffect(() => {
+    document.documentElement.dataset.themeFamily = themeFamily
+    localStorage.setItem('fm-theme-family', themeFamily)
+  }, [themeFamily])
 
   // Starting in home folder
   useEffect(() => {
@@ -76,6 +87,10 @@ export default function App() {
         onUp={() => parentPath && navigateTo(parentPath)}
         showHidden={showHidden}
         onToggleHidden={() => setShowHidden((prev) => !prev)}
+        themeFamily={themeFamily}
+        onToggleTheme={() =>
+          setThemeFamily((prev) => (prev === 'default' ? 'catppuccin' : 'default'))
+        }
       />
 
       <main className="content">
