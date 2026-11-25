@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import Toolbar from './components/Toolbar'
 import FileList from './components/FileList'
 import DetailsPanel from './components/DetailsPanel'
-import type { ContextMenuTarget, Crumb, FileEntry, ThemeFamily } from '../../shared/types'
+import type { ContextMenuTarget, Crumb, FileEntry } from '../../shared/types'
+import { useAppDispatch, useAppSelector } from './app/hooks'
+import { setSystemAccent, setThemeFamily, toggleHidden } from './features/settingsSlice'
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState('')
@@ -12,24 +14,30 @@ export default function App() {
   const [selected, setSelected] = useState<FileEntry | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [showHidden, setShowHidden] = useState(false)
-  const [systemAccent, setSystemAccent] = useState<string | null>(null)
   const [breadcrumbs, setBreadcrumbs] = useState<Crumb[]>([])
+
+  const showHidden = useAppSelector((s) => s.settings.showHidden)
+  const themeFamily = useAppSelector((s) => s.settings.themeFamily)
+  const systemAccent = useAppSelector((s) => s.settings.systemAccent)
+
+  const dispatch = useAppDispatch()
 
   useEffect(() => {
     let active = true
 
     window.fileApi
       .getAccentColor()
-      .then((color) => active && setSystemAccent(color))
-      .catch(() => active && setSystemAccent(null))
+      .then((color) => active && dispatch(setSystemAccent(color)))
+      .catch(() => active && dispatch(setSystemAccent(null)))
 
-    const unsubscribe = window.fileApi.onAccentColorChanged(setSystemAccent)
+    const unsubscribe = window.fileApi.onAccentColorChanged((color) =>
+      dispatch(setSystemAccent(color))
+    )
     return () => {
       active = false
       unsubscribe()
     }
-  }, [])
+  })
 
   useEffect(() => {
     const root = document.documentElement
@@ -44,12 +52,6 @@ export default function App() {
     }
   }, [systemAccent])
 
-  const [themeFamily, setThemeFamily] = useState<ThemeFamily>(() => {
-    const saved = localStorage.getItem('fm-theme-family')
-    return saved === 'catppuccin' ? 'catppuccin' : 'default'
-  })
-  // lazy initializer -> runs only once on mount
-
   useEffect(() => {
     document.documentElement.dataset.themeFamily = themeFamily
     localStorage.setItem('fm-theme-family', themeFamily)
@@ -61,6 +63,7 @@ export default function App() {
   }, [])
 
   // Loading folder content whenever path changes
+
   /* eslint-disable react-hooks/set-state-in-effect -- fetching on path change is a legitimate effect; the cleanup below ignores stale responses */
   useEffect(() => {
     if (!currentPath) return
@@ -130,10 +133,10 @@ export default function App() {
         onBack={goBack}
         onUp={() => parentPath && navigateTo(parentPath)}
         showHidden={showHidden}
-        onToggleHidden={() => setShowHidden((prev) => !prev)}
+        onToggleHidden={() => dispatch(toggleHidden())}
         themeFamily={themeFamily}
         onToggleTheme={() =>
-          setThemeFamily((prev) => (prev === 'default' ? 'catppuccin' : 'default'))
+          dispatch(setThemeFamily(themeFamily === 'default' ? 'catppuccin' : 'default'))
         }
         breadcrumbs={breadcrumbs}
         onNavigate={navigateTo}
