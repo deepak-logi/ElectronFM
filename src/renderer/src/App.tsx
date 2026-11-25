@@ -2,23 +2,34 @@ import { useEffect, useState } from 'react'
 import Toolbar from './components/Toolbar'
 import FileList from './components/FileList'
 import DetailsPanel from './components/DetailsPanel'
-import type { ContextMenuTarget, Crumb, FileEntry } from '../../shared/types'
+import type { ContextMenuTarget, FileEntry } from '../../shared/types'
 import { useAppDispatch, useAppSelector } from './app/hooks'
+import {
+  clearFolder,
+  goBack as goBackAction,
+  navigate,
+  selectCanGoBack,
+  selectCanGoUp,
+  setCurrentPath,
+  setFolder
+} from './features/navigationSlice'
 import { setSystemAccent, setThemeFamily, toggleHidden } from './features/settingsSlice'
 
 export default function App() {
-  const [currentPath, setCurrentPath] = useState('')
-  const [parentPath, setParentPath] = useState<string | null>(null)
-  const [history, setHistory] = useState<string[]>([])
   const [items, setItems] = useState<FileEntry[]>([])
   const [selected, setSelected] = useState<FileEntry | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [breadcrumbs, setBreadcrumbs] = useState<Crumb[]>([])
 
   const showHidden = useAppSelector((s) => s.settings.showHidden)
   const themeFamily = useAppSelector((s) => s.settings.themeFamily)
   const systemAccent = useAppSelector((s) => s.settings.systemAccent)
+
+  const currentPath = useAppSelector((s) => s.navigation.currentPath)
+  const parentPath = useAppSelector((s) => s.navigation.parentPath)
+  const canGoBack = useAppSelector(selectCanGoBack)
+  const canGoUp = useAppSelector(selectCanGoUp)
+  const breadcrumbs = useAppSelector((s) => s.navigation.breadcrumbs)
 
   const dispatch = useAppDispatch()
 
@@ -37,7 +48,7 @@ export default function App() {
       active = false
       unsubscribe()
     }
-  })
+  }, [dispatch])
 
   useEffect(() => {
     const root = document.documentElement
@@ -59,11 +70,10 @@ export default function App() {
 
   // Starting in home folder
   useEffect(() => {
-    window.fileApi.getHomeDir().then(setCurrentPath)
-  }, [])
+    window.fileApi.getHomeDir().then((path) => dispatch(setCurrentPath(path)))
+  }, [dispatch])
 
   // Loading folder content whenever path changes
-
   /* eslint-disable react-hooks/set-state-in-effect -- fetching on path change is a legitimate effect; the cleanup below ignores stale responses */
   useEffect(() => {
     if (!currentPath) return
@@ -71,15 +81,14 @@ export default function App() {
     setLoading(true)
     setError('')
     setSelected(null)
-    setBreadcrumbs([])
+    dispatch(clearFolder())
 
     window.fileApi
       .readDir(currentPath, showHidden)
       .then((result) => {
         if (cancelled) return
         setItems(result.items)
-        setParentPath(result.parent)
-        setBreadcrumbs(result.breadcrumbs)
+        dispatch(setFolder({ parent: result.parent, breadcrumbs: result.breadcrumbs }))
       })
       .catch(
         (err: unknown) =>
@@ -90,18 +99,15 @@ export default function App() {
     return () => {
       cancelled = true
     } // Ignoring results from outdated requests
-  }, [currentPath, showHidden])
+  }, [currentPath, showHidden, dispatch])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   function navigateTo(newPath: string) {
-    setHistory((prev) => [...prev, currentPath])
-    setCurrentPath(newPath)
+    dispatch(navigate(newPath))
   }
 
   function goBack() {
-    if (history.length === 0) return
-    setCurrentPath(history[history.length - 1])
-    setHistory((prev) => prev.slice(0, -1))
+    dispatch(goBackAction())
   }
 
   function handleOpen(item: FileEntry) {
@@ -128,8 +134,8 @@ export default function App() {
     <div className="app">
       <Toolbar
         currentPath={currentPath}
-        canGoBack={history.length > 0}
-        canGoUp={Boolean(parentPath)}
+        canGoBack={canGoBack}
+        canGoUp={canGoUp}
         onBack={goBack}
         onUp={() => parentPath && navigateTo(parentPath)}
         showHidden={showHidden}
