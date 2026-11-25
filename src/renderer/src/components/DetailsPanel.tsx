@@ -1,11 +1,13 @@
 import { formatSize, formatDate } from '../utils/format'
 import type { FileEntry } from '../../../shared/types'
+import { FolderSearch } from 'lucide-react'
 
 interface DetailsPanelProps {
   item: FileEntry | null
+  onReveal: (path: string) => void
 }
 
-export default function DetailsPanel({ item }: DetailsPanelProps) {
+export default function DetailsPanel({ item, onReveal }: DetailsPanelProps) {
   if (!item) {
     return (
       <aside className="details-panel">
@@ -38,6 +40,15 @@ export default function DetailsPanel({ item }: DetailsPanelProps) {
           {item.path}
         </dd>
       </dl>
+      <button
+        type="button"
+        className="details-panel__action"
+        onClick={() => onReveal(item.path)}
+        aria-label="Reveal in file manager"
+        title="Reveal in file manager"
+      >
+        <FolderSearch size={18} aria-hidden />
+      </button>
     </aside>
   )
 }

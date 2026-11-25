@@ -36,4 +36,23 @@
   &__empty {
     color: var(--color-text-muted);
   }
+
+  &__action {
+    @include flex-center(space(2));
+    margin-top: space(5);
+    padding: space(2) space(3);
+    border: 1px solid var(--color-border);
+    border-radius: $radius-sm;
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--color-hover);
+    }
+
+    &:focus-visible {
+      @include focus-ring;
+    }
+  }
 }

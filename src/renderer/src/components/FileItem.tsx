@@ -7,9 +7,10 @@ interface FileItemProps {
   isSelected: boolean
   onSelect: (item: FileEntry) => void
   onOpen: (item: FileEntry) => void
+  onReveal: (path: string) => void
 }
 
-export default function FileItem({ item, isSelected, onSelect, onOpen }: FileItemProps) {
+export default function FileItem({ item, isSelected, onSelect, onOpen, onReveal }: FileItemProps) {
   // createElement keeps the icon a stable, module-level component instead of a
   // component variable created during render (which react-hooks flags).
   const icon = createElement(getFileIcon(item), {
@@ -27,6 +28,10 @@ export default function FileItem({ item, isSelected, onSelect, onOpen }: FileIte
       onClick={() => onSelect(item)}
       onDoubleClick={() => onOpen(item)}
       onKeyDown={(event) => event.key === 'Enter' && onOpen(item)}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        onReveal(item.path)
+      }}
     >
       {icon}
       <span className="file-item__name" title={item.name}>

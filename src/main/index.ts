@@ -74,6 +74,13 @@ function macAccent(): string | null {
 
 ipcMain.handle('system:getAccentColor', (): string | null => macAccent())
 
+ipcMain.handle('shell:showItemInFolder', async (_event, filePath: unknown): Promise<void> => {
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) {
+    throw new Error('Invalid file selected')
+  }
+  shell.showItemInFolder(filePath)
+})
+
 function createWindow() {
   // Create the browser window.
   const mainWindow = new BrowserWindow({

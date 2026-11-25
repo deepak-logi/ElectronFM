@@ -27,7 +27,7 @@ It also keeps the existing electron-vite behaviour: load the dev server URL in d
 
 ### Preload
 
-`src/preload/index.ts` exposes five functions:
+`src/preload/index.ts` exposes six functions:
 
 ```ts
 contextBridge.exposeInMainWorld('fileApi', {
@@ -40,11 +40,13 @@ contextBridge.exposeInMainWorld('fileApi', {
     const listener = (_event: unknown, color: string | null) => callback(color)
     ipcRenderer.on('system:accent-changed', listener)
     return () => ipcRenderer.removeListener('system:accent-changed', listener)
-  }
+  },
+  showItemInFolder: (filePath: string): Promise<void> =>
+    ipcRenderer.invoke('shell:showItemInFolder', filePath)
 })
 ```
 
-It never exposes `ipcRenderer` itself. The renderer can only call these five operations — it cannot invent new IPC channels or reach Node APIs. `onAccentColorChanged` is the one push-based API: it wraps `ipcRenderer.on` and hands back only an unsubscribe function. `src/preload/index.d.ts` declares this shape as `Window.fileApi`, so the renderer gets autocomplete and compile-time checking on the bridge.
+It never exposes `ipcRenderer` itself. The renderer can only call these six operations — it cannot invent new IPC channels or reach Node APIs. `onAccentColorChanged` is the one push-based API: it wraps `ipcRenderer.on` and hands back only an unsubscribe function. `src/preload/index.d.ts` declares this shape as `Window.fileApi`, so the renderer gets autocomplete and compile-time checking on the bridge.
 
 ### Renderer
 
@@ -55,6 +57,7 @@ The renderer is a normal React app:
 - `utils/format.ts` contains pure formatting helpers, and `utils/fileIcons.ts` maps a `FileEntry` to a lucide icon.
 - `styles/` holds the SCSS structure; `main.scss` is the only stylesheet React imports. See [`styling.md`](styling.md).
 - `Toolbar` hosts Back, Up, hidden-files, and theme-family buttons. All four states stay in `App.tsx`.
+- `DetailsPanel` has a "Reveal in file manager" button, and `FileItem` has a right-click handler; both call the same `App` callback, which routes errors to the shared error state.
 
 ## TypeScript layout
 
@@ -85,17 +88,18 @@ Because all three read the same interface, changing a field in the main process 
 
 ## IPC channels
 
-| Channel                 | Direction       | Input                                       | Returns                                             |
-| ----------------------- | --------------- | ------------------------------------------- | --------------------------------------------------- |
-| `fs:getHomeDir`         | Renderer → Main | none                                        | The user's home folder path                         |
-| `fs:readDir`            | Renderer → Main | Absolute folder path + `showHidden` boolean | `{ path, parent, items }`                           |
-| `shell:openPath`        | Renderer → Main | Absolute file path                          | Nothing, or an error message                        |
-| `system:getAccentColor` | Renderer → Main | none                                        | `#RRGGBB` or `null` on non-macOS                    |
-| `system:accent-changed` | Main → Renderer | Accent colour or `null`                     | Delivered via `window.fileApi.onAccentColorChanged` |
+| Channel                  | Direction       | Input                                       | Returns                                             |
+| ------------------------ | --------------- | ------------------------------------------- | --------------------------------------------------- |
+| `fs:getHomeDir`          | Renderer → Main | none                                        | The user's home folder path                         |
+| `fs:readDir`             | Renderer → Main | Absolute folder path + `showHidden` boolean | `{ path, parent, items }`                           |
+| `shell:openPath`         | Renderer → Main | Absolute file path                          | Nothing, or an error message                        |
+| `system:getAccentColor`  | Renderer → Main | none                                        | `#RRGGBB` or `null` on non-macOS                    |
+| `system:accent-changed`  | Main → Renderer | Accent colour or `null`                     | Delivered via `window.fileApi.onAccentColorChanged` |
+| `shell:showItemInFolder` | Renderer → Main | Absolute file or folder path                | Nothing, or an error message                        |
 
 `system:getAccentColor` is called once on mount to seed the renderer. Live changes use the one main → renderer channel: on macOS the main process subscribes to `AppleAquaColorVariantChanged`, `AppleColorPreferencesChangedNotification`, and `AppleInterfaceThemeChangedNotification`, then re-reads the accent **100 ms later** (the notification can arrive before macOS has written the new value) and pushes it only if it differs from the last value sent. Electron's `accent-color-changed` event is Windows/Linux only, so it cannot be used on macOS.
 
-`fs:readDir` rejects with `Invalid folder path` if the argument is not a string or is not absolute, and with `Invalid showHidden flag` if the second argument is not a boolean. Hidden entries (names starting with `.`) are filtered out before `fs.stat` when `showHidden` is false. `shell:openPath` rejects with `Invalid file path` for the same path checks, or with the OS error message if the file cannot be opened (for example, no application is associated with the file).
+`fs:readDir` rejects with `Invalid folder path` if the argument is not a string or is not absolute, and with `Invalid showHidden flag` if the second argument is not a boolean. Hidden entries (names starting with `.`) are filtered out before `fs.stat` when `showHidden` is false. `shell:openPath` rejects with `Invalid file path` for the same path checks, or with the OS error message if the file cannot be opened (for example, no application is associated with the file). `shell:showItemInFolder` checks the same way and rejects with `Invalid file selected`; unlike `openPath`, it returns `void` synchronously, so there is no OS error string to inspect.
 
 ## The item data shape
 

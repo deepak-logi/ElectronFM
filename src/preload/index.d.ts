@@ -11,6 +11,7 @@ declare global {
       openPath: (filePath: string) => Promise<void>
       getAccentColor: () => Promise<string | null>
       onAccentColorChanged: (callback: (color: string | null) => void) => () => void
+      showItemInFolder: (filePath: string) => Promise<void>
     }
   }
 }

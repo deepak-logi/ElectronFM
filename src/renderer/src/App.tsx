@@ -106,6 +106,12 @@ export default function App() {
         .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Unknown error'))
   }
 
+  function handleReveal(filePath: string) {
+    window.fileApi
+      .showItemInFolder(filePath)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Unknown error'))
+  }
+
   return (
     <div className="app">
       <Toolbar
@@ -136,10 +142,11 @@ export default function App() {
               selected={selected}
               onSelect={setSelected}
               onOpen={handleOpen}
+              onReveal={handleReveal}
             />
           )}
         </section>
-        <DetailsPanel item={selected} />
+        <DetailsPanel item={selected} onReveal={handleReveal} />
       </main>
     </div>
   )

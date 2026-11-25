@@ -25,6 +25,7 @@ A small desktop file manager built with Electron and React. It browses the local
 - Show/hide hidden files (dot-prefixed names) with a toolbar toggle.
 - Switch between the default palette and Catppuccin; the OS still decides light or dark (Latte / Mocha).
 - In the default palette, file selection and focus colours follow the macOS accent color live.
+- Reveal a selected file in the system file manager from the details panel or a right-click.
 - Loading, error, and empty-folder states.
 
 **Not implemented (out of scope for this build)**
@@ -180,7 +181,7 @@ The full conventions and folder guide are in [`docs/styling.md`](docs/styling.md
 ## Security decisions
 
 - **Context isolation stays on** (Electron's default) and **Node integration stays off**, so renderer code cannot access Node or Electron internals directly.
-- The preload exposes **five named functions** (`getHomeDir`, `readDir`, `openPath`, `getAccentColor`, `onAccentColorChanged`) instead of exposing `ipcRenderer` itself. `onAccentColorChanged` returns an unsubscribe function, and all signatures are declared in `src/preload/index.d.ts`.
+- The preload exposes **six named functions** (`getHomeDir`, `readDir`, `openPath`, `getAccentColor`, `onAccentColorChanged`, `showItemInFolder`) instead of exposing `ipcRenderer` itself. `onAccentColorChanged` returns an unsubscribe function, and all signatures are declared in `src/preload/index.d.ts`.
 - Both IPC handlers **validate input** before using a path: the argument is typed `unknown`, then narrowed to a string and checked with `path.isAbsolute`. `fs:readDir` rejects with `Invalid folder path`, `shell:openPath` with `Invalid file path`.
 - File system access uses **async `fs/promises`**, so the UI never freezes on slow folders.
 - The `remote` module is not used; all communication goes through `ipcMain.handle` / `ipcRenderer.invoke`.
@@ -219,7 +220,6 @@ Builds are currently **unsigned** and **not notarized**. Locally built apps run 
 - Clickable breadcrumb path, built with `path.dirname` in the main process.
 - Create folder.
 - Keyboard navigation and shortcuts.
-- "Reveal in Finder" using `shell.showItemInFolder`.
 - Virtualized file list for huge folders.
 - Automated tests for the main-process handlers and React components.
 - Add `typecheck` and `lint` to a CI pipeline.

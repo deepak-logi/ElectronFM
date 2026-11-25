@@ -15,5 +15,8 @@ contextBridge.exposeInMainWorld('fileApi', {
     const listener = (_event: unknown, color: string | null) => callback(color)
     ipcRenderer.on('system:accent-changed', listener)
     return () => ipcRenderer.removeListener('system:accent-changed', listener)
-  }
+  },
+
+  showItemInFolder: (filePath: string): Promise<void> =>
+    ipcRenderer.invoke('shell:showItemInFolder', filePath)
 })

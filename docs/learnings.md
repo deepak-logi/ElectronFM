@@ -111,6 +111,19 @@ Double-clicking a file opened Ghostty instead of what I expected. That is not a 
 
 The important distinction: **Finder is a file manager, not the default handler for files.** If I want to reveal a file in Finder instead, the API is `shell.showItemInFolder`.
 
+### `showItemInFolder` returns `void`, not a promise
+
+I initially copied the `openPath` handler pattern:
+
+```ts
+const errorMessage = shell.showItemInFolder(filePath)
+if (errorMessage) throw new Error(errorMessage)
+```
+
+That is wrong. `shell.openPath` returns `Promise<string>` whose resolved value is an error message (`''` on success), so checking it makes sense. `shell.showItemInFolder` is synchronous and returns `void` — there is no error string to inspect. TypeScript rejects the truthiness check with `TS1345`. The handler now just validates the path and calls the function; any thrown validation error still travels back to the renderer through `ipcRenderer.invoke`'s promise.
+
+The UI exposes this through a details-panel button and a right-click on a file row. The button is keyboard-accessible; the context menu is a convenience, not the only way to reach the feature.
+
 ### `Dirent.isDirectory()` does not follow symlinks
 
 `fs.readdir(..., { withFileTypes: true })` returns `Dirent` objects. For a symlink, `entry.isDirectory()` is `false` even when the link points to a folder. Since I already call `fs.stat` (which follows links), using `stats.isDirectory()` makes symlinked folders navigable instead of sending them to `openPath`.
