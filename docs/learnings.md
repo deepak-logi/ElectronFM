@@ -347,6 +347,31 @@ The accent mapping was initially gated on `:root[data-accent-source]`, but the r
 
 The same block originally mixed up the two `color-mix()` ratios: an 88% accent made the selected row almost solid, while the focus ring should have been the strongly tinted one. The selected row needs a subtle ~18% tint mixed with the background; the ring needs the higher-contrast mix mixed with the text colour.
 
+## Redux Toolkit
+
+### Moving state in four small stages worked
+
+I migrated from one `App.tsx` with eleven `useState` calls to three slices without a big-bang rewrite:
+
+1. install Redux Toolkit + React-Redux, create an empty store, typed hooks and a `Provider` — no behaviour change;
+2. move `showHidden`, `themeFamily` and `systemAccent` into a `settings` slice;
+3. move path, parent, history and breadcrumbs into a `navigation` slice;
+4. move items, selection, loading and error into a `files` slice with an async thunk.
+
+Every stage type-checked on its own. The rule was: don't move the next piece of state until the previous stage passes `typecheck` and `lint`.
+
+### Thunks own IPC, reducers stay pure
+
+The `readDir` call used to live in a `useEffect`. In Redux it became a `createAsyncThunk`: the payload creator calls `window.fileApi.readDir`, while `pending`/`fulfilled`/`rejected` reducers only change state. That keeps side effects out of reducers and makes `App.tsx` declarative — it just dispatches when `currentPath` or `showHidden` changes.
+
+### `requestId` replaces the `cancelled` flag
+
+`createAsyncThunk` gives every call a `requestId`. Storing it on `pending` and comparing it in `fulfilled`/`rejected` does exactly what the old cleanup flag did. I initially guarded only `filesSlice`; `navigationSlice` was still accepting stale `fulfilled` results and overwriting breadcrumbs from an older folder. Both slices now guard. The same idea caught a second bug: error banner state used to hide the file list entirely, so a failed file-open left the UI stuck. Clearing `items` on `pending` and rendering the list whenever `!loading` fixed it.
+
+### Export interfaces used in inferred public types
+
+`RootState` is inferred from `store`, which is inferred from the reducers. When `SettingsState` was not exported, declaration emit failed with `TS4023` in the editor even though `npm run typecheck` passed, because the scripts use `--noEmit`. Exporting the state interfaces (`SettingsState`, `NavigationState`, `FilesState`) fixed it. This is the second time the editor and CLI checked different configurations — the first was `TS5055` from `composite` without `outDir`.
+
 ## What I would do differently
 
 1. **Write the props contract before the component.** A small table of prop names, types, and purpose would have prevented the Toolbar signature bug.

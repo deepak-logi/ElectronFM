@@ -8,13 +8,15 @@ export interface NavigationState {
   parentPath: string | null
   history: string[]
   breadcrumbs: Crumb[]
+  requestId: string | null
 }
 
 const initialState: NavigationState = {
   currentPath: '',
   parentPath: null,
   history: [],
-  breadcrumbs: []
+  breadcrumbs: [],
+  requestId: null
 }
 
 const navigationSlice = createSlice({
@@ -35,10 +37,14 @@ const navigationSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(loadDirectory.pending, (state) => {
+      .addCase(loadDirectory.pending, (state, action) => {
         state.breadcrumbs = []
+        state.requestId = action.meta.requestId
       })
       .addCase(loadDirectory.fulfilled, (state, action) => {
+        // Match the guard in filesSlice: a stale response must not restore an
+        // older folder's parent path or breadcrumbs.
+        if (state.requestId !== action.meta.requestId) return
         state.parentPath = action.payload.parent
         state.breadcrumbs = action.payload.breadcrumbs
       })

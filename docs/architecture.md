@@ -123,20 +123,20 @@ Entries are sorted with **folders first**, then by name using `localeCompare`. E
 
 `buildBreadcrumbs` in the main process walks upward from the requested folder until it reaches `path.parse(dirPath).root`, collecting `{ name, path }` pairs and reversing them so the root comes first. The user's home folder is labelled `Home`. This belongs in main because the renderer has no `path` module and Windows paths use a different separator and root.
 
-`fs:readDir` returns the segments as part of `DirResult`. `App` stores them in state and passes them to `Toolbar`, which renders every ancestor as a button and the last segment as plain text with `aria-current="page"`. Clicking a button reuses `navigateTo`, so breadcrumb navigation goes through the same history logic as Back and Up.
+`fs:readDir` returns the segments as part of `DirResult`. The `loadDirectory` thunk's `fulfilled` action stores them in the `navigation` slice; `App` reads them with a selector and passes them to `Toolbar`, which renders every ancestor as a button and the last segment as plain text with `aria-current="page"`. Clicking a button dispatches `navigate`, so breadcrumb navigation goes through the same history logic as Back and Up.
 
 ## Walkthrough: double-clicking a folder
 
 1. `FileItem` fires `onDoubleClick` and calls `onOpen(item)`.
 2. `App.handleOpen(item)` sees `item.isDirectory === true` and calls `navigateTo(item.path)`.
 3. `navigateTo` pushes the current path onto `history` and sets `currentPath` to the new folder.
-4. The `useEffect` that depends on `currentPath` and `showHidden` runs. It marks the request as not cancelled, sets `loading`, clears the previous error and selection, and calls `window.fileApi.readDir(currentPath, showHidden)`.
+4. The `useEffect` that depends on `currentPath` and `showHidden` dispatches the `loadDirectory` thunk. Its `pending` action sets `loading`, clears the previous error/selection/items and records the request id.
 5. The preload calls `ipcRenderer.invoke('fs:readDir', currentPath, showHidden)`.
 6. The main process validates the path and the boolean flag, runs `fs.readdir(..., { withFileTypes: true })`, skips dot-prefixed entries when hidden files are off, calls `fs.stat` for each remaining entry, sorts the results, computes the parent path, builds the breadcrumb segments with `buildBreadcrumbs` (using `path.parse().root`, `path.basename`, and `path.dirname`), and returns `{ path, parent, items, breadcrumbs }`.
-7. Back in React, `setItems(result.items)`, `setParentPath(result.parent)`, and `setBreadcrumbs(result.breadcrumbs)` update the UI, and `loading` becomes `false`.
-8. `FileList` re-renders the new items. `DetailsPanel` continues to show its empty state, because selection was already cleared in step 4.
+7. The thunk's `fulfilled` action stores `items` in the `files` slice; the `navigation` slice stores `parentPath` and `breadcrumbs` from the same payload, and `loading` becomes `false`.
+8. `FileList` re-renders the new items. `DetailsPanel` continues to show its empty state, because selection was already cleared by `pending`.
 
-If the user navigates again before the first request finishes, the cleanup function sets `cancelled = true`, so the stale response is ignored. This prevents an older, slower folder from overwriting a newer one.
+If the user navigates again before the first request finishes, both slices compare `action.meta.requestId` with the id stored on `pending` and ignore the stale response. This replaces the old `cancelled` flag in the effect cleanup.
 
 ## Walkthrough: double-clicking a file
 
@@ -190,25 +190,21 @@ sequenceDiagram
     OS-->>U: Opens default application
 ```
 
-## State ownership
+## State management
 
-All state lives in `App.tsx`:
+Renderer state lives in three Redux Toolkit slices, not in `App.tsx`:
 
-| State          | Purpose                                                                                                   |
-| -------------- | --------------------------------------------------------------------------------------------------------- |
-| `currentPath`  | Folder currently displayed                                                                                |
-| `parentPath`   | Parent folder, or `null` at the file-system root                                                          |
-| `history`      | Array of previously visited paths for the Back button                                                     |
-| `items`        | Entries in the current folder                                                                             |
-| `selected`     | The selected item object, or `null`                                                                       |
-| `loading`      | Whether a folder request is in flight                                                                     |
-| `error`        | Error message to display                                                                                  |
-| `showHidden`   | Whether dot-prefixed entries are included; also an effect dependency for reloading                        |
-| `themeFamily`  | `'default'` or `'catppuccin'`, persisted in `localStorage` and written to `data-theme-family` on `<html>` |
-| `systemAccent` | Last accent reported by macOS, or `null`; written to `--accent-source` on `<html>`                        |
-| `breadcrumbs`  | Ancestor segments of the current folder; cleared while loading and passed to `Toolbar` for navigation     |
+| Slice        | State                                                              | Actions                                                     |
+| ------------ | ------------------------------------------------------------------ | ----------------------------------------------------------- |
+| `files`      | `items`, `selected`, `loading`, `error`, `requestId`               | `selectItem`, `reportError`, plus the `loadDirectory` thunk |
+| `navigation` | `currentPath`, `parentPath`, `history`, `breadcrumbs`, `requestId` | `setCurrentPath`, `navigate`, `goBack`                      |
+| `settings`   | `showHidden`, `themeFamily`, `systemAccent`                        | `toggleHidden`, `setThemeFamily`, `setSystemAccent`         |
 
-Child components are intentionally stateless. This keeps the data flow one-directional and makes it obvious where a bug lives: if the UI is wrong, check the props `App` passed down.
+`app/store.ts` combines the reducers and exports `RootState`/`AppDispatch`; `app/hooks.ts` exports `useAppSelector` and `useAppDispatch` created with `.withTypes(...)`, so selectors and thunks are fully typed. `App.tsx` has no local state — it reads values with selectors and dispatches actions. Child components remain presentational, receiving props from `App`.
+
+`loadDirectory` is a `createAsyncThunk` that calls `window.fileApi.readDir`. `pending` sets `loading`, clears the previous selection/error/items and records `action.meta.requestId`. Both `files` and `navigation` ignore `fulfilled`/`rejected` results whose `requestId` no longer matches, so an older, slower folder read cannot overwrite a newer one. The `navigation` slice stores `parentPath` and `breadcrumbs` from the same successful result.
+
+DOM and `localStorage` effects (theme attribute, `--accent-source`) stay in `App.tsx` but read their values from the store. IPC side effects stay in thunks or event handlers; reducers remain pure.
 
 ## Error handling
 
@@ -216,4 +212,4 @@ Child components are intentionally stateless. This keeps the data flow one-direc
 - **Unreadable entries** are skipped during `readDir` instead of failing the folder.
 - **Folder read failures** (for example, permission denied) reject the promise and appear in the error state.
 - **File open failures** (no associated app, missing file) are caught in `App` and shown as an error message. Both `.catch` handlers check `err instanceof Error` before reading `err.message`, with an `Unknown error` fallback for non-`Error` rejections.
-- **Stale requests** are ignored through the `cancelled` flag in the effect cleanup.
+- **Stale requests** are ignored by comparing `action.meta.requestId` with the id stored on `pending` in both the `files` and `navigation` slices.

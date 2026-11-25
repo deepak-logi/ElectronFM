@@ -41,6 +41,8 @@ const filesSlice = createSlice({
         state.loading = true
         state.error = ''
         state.selected = null
+        // Don't show the previous folder's entries while the new one loads.
+        state.items = []
         state.requestId = action.meta.requestId
       })
       .addCase(loadDirectory.fulfilled, (state, action) => {

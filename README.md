@@ -46,6 +46,7 @@ A small desktop file manager built with Electron and React. It browses the local
 | Main process  | Node.js `fs/promises`, `path`, `os`, `electron.shell` |
 | Secure bridge | Preload script + `contextBridge`                      |
 | UI            | React 19 + Vite 8                                     |
+| State         | Redux Toolkit 2 + React-Redux 9 (typed hooks)         |
 | Styling       | SCSS (Sass) with BEM and CSS custom properties        |
 | Icons         | lucide-react                                          |
 | Build tooling | electron-vite 6, electron-builder 26                  |
@@ -106,9 +107,16 @@ file-manager/
 │   └── renderer/
 │       ├── index.html
 │       └── src/
-│           ├── App.tsx       # State, data loading, navigation
-│           ├── main.tsx      # React entry point
+│           ├── App.tsx       # Layout, effects, dispatch — no local state
+│           ├── main.tsx      # React entry point + Redux Provider
 │           ├── env.d.ts      # Vite client types
+│           ├── app/
+│           │   ├── store.ts  # configureStore + RootState/AppDispatch
+│           │   └── hooks.ts  # Typed useAppSelector / useAppDispatch
+│           ├── features/
+│           │   ├── filesSlice.ts       # Items, selection, loading, error, loadDirectory thunk
+│           │   ├── navigationSlice.ts  # Path, parent, history, breadcrumbs
+│           │   └── settingsSlice.ts    # Hidden files, theme family, macOS accent
 │           ├── components/
 │           │   ├── Toolbar.tsx
 │           │   ├── FileList.tsx
@@ -165,6 +173,20 @@ Two details are worth knowing:
 - **`noImplicitAny` is explicitly enabled** in both project configs. The shared `@electron-toolkit/tsconfig` base turns it off, so it has to be set per project. IPC arguments are typed `unknown` and narrowed by the `typeof` / `path.isAbsolute` checks.
 
 `react/prop-types` is deliberately off: TypeScript's prop interfaces replace runtime PropTypes entirely.
+
+## State management
+
+Renderer state lives in three Redux Toolkit slices under `src/renderer/src/features/`:
+
+| Slice        | Owns                                                  |
+| ------------ | ----------------------------------------------------- |
+| `files`      | `items`, `selected`, `loading`, `error`, `requestId`  |
+| `navigation` | `currentPath`, `parentPath`, `history`, `breadcrumbs` |
+| `settings`   | `showHidden`, `themeFamily`, `systemAccent`           |
+
+`app/store.ts` combines them and exports `RootState`/`AppDispatch`; `app/hooks.ts` exports pre-typed `useAppSelector`/`useAppDispatch`. Components read what they need directly, so `App.tsx` has no `useState` left.
+
+`loadDirectory` is a `createAsyncThunk` that calls the typed `window.fileApi.readDir` bridge. Its `pending`/`fulfilled`/`rejected` actions drive loading and error state; `requestId` ensures a slower, older folder read cannot overwrite a newer one. The `navigation` slice reacts to the same thunk to store the parent path and breadcrumbs. DOM and `localStorage` side effects (theme attribute, accent custom property) stay in small `useEffect` hooks that read values from the store.
 
 ## Styling
 

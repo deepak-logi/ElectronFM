@@ -139,7 +139,7 @@ export default function App() {
               {error}
             </p>
           )}
-          {!loading && !error && (
+          {!loading && (
             <FileList
               items={items}
               selected={selected}

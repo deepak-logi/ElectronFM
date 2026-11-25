@@ -67,7 +67,7 @@ Partial files start with `_` so Sass never emits them on their own. `abstracts/_
 
 ### Theme families
 
-There are two palettes, selected by a toolbar toggle. The choice is stored in `localStorage` under `fm-theme-family` and applied as an attribute on `<html>`:
+There are two palettes, selected by a toolbar toggle. The chosen family lives in the `settings` Redux slice; a small effect reads it from the store, stores it in `localStorage` under `fm-theme-family` and applies it as an attribute on `<html>`:
 
 ```ts
 document.documentElement.dataset.themeFamily = themeFamily
