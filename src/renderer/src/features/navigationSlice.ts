@@ -1,6 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit'
 import type { PayloadAction } from '@reduxjs/toolkit'
 import type { Crumb } from '../../../shared/types'
+import { loadDirectory } from './filesSlice'
 
 export interface NavigationState {
   currentPath: string
@@ -30,18 +31,21 @@ const navigationSlice = createSlice({
     goBack(state) {
       if (state.history.length === 0) return
       state.currentPath = state.history.pop()!
-    },
-    setFolder(state, action: PayloadAction<{ parent: string | null; breadcrumbs: Crumb[] }>) {
-      state.parentPath = action.payload.parent
-      state.breadcrumbs = action.payload.breadcrumbs
-    },
-    clearFolder(state) {
-      state.breadcrumbs = []
     }
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(loadDirectory.pending, (state) => {
+        state.breadcrumbs = []
+      })
+      .addCase(loadDirectory.fulfilled, (state, action) => {
+        state.parentPath = action.payload.parent
+        state.breadcrumbs = action.payload.breadcrumbs
+      })
   }
 })
 
-export const { setCurrentPath, navigate, goBack, setFolder, clearFolder } = navigationSlice.actions
+export const { setCurrentPath, navigate, goBack } = navigationSlice.actions
 
 export const selectCanGoBack = (state: { navigation: NavigationState }) =>
   state.navigation.history.length > 0

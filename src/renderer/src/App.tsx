@@ -1,26 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import Toolbar from './components/Toolbar'
 import FileList from './components/FileList'
 import DetailsPanel from './components/DetailsPanel'
 import type { ContextMenuTarget, FileEntry } from '../../shared/types'
 import { useAppDispatch, useAppSelector } from './app/hooks'
 import {
-  clearFolder,
   goBack as goBackAction,
   navigate,
   selectCanGoBack,
   selectCanGoUp,
-  setCurrentPath,
-  setFolder
+  setCurrentPath
 } from './features/navigationSlice'
+import { loadDirectory, reportError, selectItem } from './features/filesSlice'
 import { setSystemAccent, setThemeFamily, toggleHidden } from './features/settingsSlice'
 
 export default function App() {
-  const [items, setItems] = useState<FileEntry[]>([])
-  const [selected, setSelected] = useState<FileEntry | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
   const showHidden = useAppSelector((s) => s.settings.showHidden)
   const themeFamily = useAppSelector((s) => s.settings.themeFamily)
   const systemAccent = useAppSelector((s) => s.settings.systemAccent)
@@ -30,6 +24,11 @@ export default function App() {
   const canGoBack = useAppSelector(selectCanGoBack)
   const canGoUp = useAppSelector(selectCanGoUp)
   const breadcrumbs = useAppSelector((s) => s.navigation.breadcrumbs)
+
+  const items = useAppSelector((s) => s.files.items)
+  const selected = useAppSelector((s) => s.files.selected)
+  const loading = useAppSelector((s) => s.files.loading)
+  const error = useAppSelector((s) => s.files.error)
 
   const dispatch = useAppDispatch()
 
@@ -73,34 +72,12 @@ export default function App() {
     window.fileApi.getHomeDir().then((path) => dispatch(setCurrentPath(path)))
   }, [dispatch])
 
-  // Loading folder content whenever path changes
-  /* eslint-disable react-hooks/set-state-in-effect -- fetching on path change is a legitimate effect; the cleanup below ignores stale responses */
+  // Loading folder content whenever the path or the hidden-files setting changes.
+  // The thunk handles loading, errors and stale responses via requestId.
   useEffect(() => {
     if (!currentPath) return
-    let cancelled = false
-    setLoading(true)
-    setError('')
-    setSelected(null)
-    dispatch(clearFolder())
-
-    window.fileApi
-      .readDir(currentPath, showHidden)
-      .then((result) => {
-        if (cancelled) return
-        setItems(result.items)
-        dispatch(setFolder({ parent: result.parent, breadcrumbs: result.breadcrumbs }))
-      })
-      .catch(
-        (err: unknown) =>
-          !cancelled && setError(err instanceof Error ? err.message : 'Unknown error')
-      )
-      .finally(() => !cancelled && setLoading(false))
-
-    return () => {
-      cancelled = true
-    } // Ignoring results from outdated requests
+    dispatch(loadDirectory({ path: currentPath, showHidden }))
   }, [currentPath, showHidden, dispatch])
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   function navigateTo(newPath: string) {
     dispatch(navigate(newPath))
@@ -115,19 +92,25 @@ export default function App() {
     else
       window.fileApi
         .openPath(item.path)
-        .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Unknown error'))
+        .catch((err: unknown) =>
+          dispatch(reportError(err instanceof Error ? err.message : 'Unknown error'))
+        )
   }
 
   function handleReveal(filePath: string) {
     window.fileApi
       .showItemInFolder(filePath)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Unknown error'))
+      .catch((err: unknown) =>
+        dispatch(reportError(err instanceof Error ? err.message : 'Unknown error'))
+      )
   }
 
   function handleShowMenu(target: ContextMenuTarget) {
     window.fileApi
       .showContextMenu(target)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Unknown error'))
+      .catch((err: unknown) =>
+        dispatch(reportError(err instanceof Error ? err.message : 'Unknown error'))
+      )
   }
 
   return (
@@ -160,7 +143,7 @@ export default function App() {
             <FileList
               items={items}
               selected={selected}
-              onSelect={setSelected}
+              onSelect={(item) => dispatch(selectItem(item))}
               onOpen={handleOpen}
               onShowMenu={handleShowMenu}
             />
