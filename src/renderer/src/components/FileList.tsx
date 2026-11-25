@@ -1,4 +1,4 @@
-import type { FileEntry } from '../../../shared/types'
+import type { ContextMenuTarget, FileEntry } from '../../../shared/types'
 import FileItem from './FileItem'
 
 interface FileListProps {
@@ -6,10 +6,10 @@ interface FileListProps {
   selected: FileEntry | null
   onSelect: (item: FileEntry) => void
   onOpen: (item: FileEntry) => void
-  onReveal: (path: string) => void
+  onShowMenu: (target: ContextMenuTarget) => void
 }
 
-export default function FileList({ items, selected, onSelect, onOpen, onReveal }: FileListProps) {
+export default function FileList({ items, selected, onSelect, onOpen, onShowMenu }: FileListProps) {
   if (items.length === 0) return <p className="state">This folder is empty.</p>
 
   return (
@@ -21,7 +21,7 @@ export default function FileList({ items, selected, onSelect, onOpen, onReveal }
           isSelected={selected?.path === item.path}
           onSelect={onSelect}
           onOpen={onOpen}
-          onReveal={onReveal}
+          onShowMenu={onShowMenu}
         />
       ))}
     </ul>

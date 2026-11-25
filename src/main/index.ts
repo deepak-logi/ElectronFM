@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, systemPreferences } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, systemPreferences, Menu, clipboard } from 'electron'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import path, { join } from 'node:path'
@@ -84,6 +84,40 @@ ipcMain.handle('shell:showItemInFolder', async (_event, filePath: unknown): Prom
     throw new Error('Invalid file selected')
   }
   shell.showItemInFolder(filePath)
+})
+
+ipcMain.handle('shell:showContextMenu', (_event, target: unknown): void => {
+  if (typeof target !== 'object' || target === null) {
+    throw new Error('Invalid context menu target')
+  }
+
+  const { path: itemPath, isDirectory } = target as Record<string, unknown>
+  if (typeof itemPath !== 'string' || !path.isAbsolute(itemPath)) {
+    throw new Error('Invalid file selected')
+  }
+  if (typeof isDirectory !== 'boolean') {
+    throw new Error('Invalid item type')
+  }
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: isDirectory ? 'Open folder' : 'Open',
+      click: () => {
+        void shell.openPath(itemPath)
+      }
+    },
+    {
+      label: 'Reveal in file manager',
+      click: () => shell.showItemInFolder(itemPath)
+    },
+    { type: 'separator' },
+    {
+      label: 'Copy path',
+      click: () => clipboard.writeText(itemPath)
+    }
+  ])
+
+  menu.popup()
 })
 
 function buildBreadcrumbs(dirPath: string): Crumb[] {

@@ -1,7 +1,7 @@
 // type declaration in .d.ts
 // .ts contain implementation
 
-import type { DirResult } from '../shared/types'
+import type { ContextMenuTarget, DirResult } from '../shared/types'
 
 declare global {
   interface Window {
@@ -12,6 +12,7 @@ declare global {
       getAccentColor: () => Promise<string | null>
       onAccentColorChanged: (callback: (color: string | null) => void) => () => void
       showItemInFolder: (filePath: string) => Promise<void>
+      showContextMenu: (target: ContextMenuTarget) => Promise<void>
     }
   }
 }

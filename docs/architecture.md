@@ -27,7 +27,7 @@ It also keeps the existing electron-vite behaviour: load the dev server URL in d
 
 ### Preload
 
-`src/preload/index.ts` exposes six functions:
+`src/preload/index.ts` exposes seven functions:
 
 ```ts
 contextBridge.exposeInMainWorld('fileApi', {
@@ -42,11 +42,13 @@ contextBridge.exposeInMainWorld('fileApi', {
     return () => ipcRenderer.removeListener('system:accent-changed', listener)
   },
   showItemInFolder: (filePath: string): Promise<void> =>
-    ipcRenderer.invoke('shell:showItemInFolder', filePath)
+    ipcRenderer.invoke('shell:showItemInFolder', filePath),
+  showContextMenu: (target: ContextMenuTarget): Promise<void> =>
+    ipcRenderer.invoke('shell:showContextMenu', target)
 })
 ```
 
-It never exposes `ipcRenderer` itself. The renderer can only call these six operations — it cannot invent new IPC channels or reach Node APIs. `onAccentColorChanged` is the one push-based API: it wraps `ipcRenderer.on` and hands back only an unsubscribe function. `src/preload/index.d.ts` declares this shape as `Window.fileApi`, so the renderer gets autocomplete and compile-time checking on the bridge.
+It never exposes `ipcRenderer` itself. The renderer can only call these seven operations — it cannot invent new IPC channels or reach Node APIs. `onAccentColorChanged` is the one push-based API: it wraps `ipcRenderer.on` and hands back only an unsubscribe function. `src/preload/index.d.ts` declares this shape as `Window.fileApi`, so the renderer gets autocomplete and compile-time checking on the bridge.
 
 ### Renderer
 
@@ -57,7 +59,7 @@ The renderer is a normal React app:
 - `utils/format.ts` contains pure formatting helpers, and `utils/fileIcons.ts` maps a `FileEntry` to a lucide icon.
 - `styles/` holds the SCSS structure; `main.scss` is the only stylesheet React imports. See [`styling.md`](styling.md).
 - `Toolbar` hosts Back, Up, hidden-files, and theme-family buttons. All four states stay in `App.tsx`.
-- `DetailsPanel` has a "Reveal in file manager" button, and `FileItem` has a right-click handler; both call the same `App` callback, which routes errors to the shared error state.
+- `DetailsPanel` has a "Reveal in file manager" button. `FileItem` handles right-click by invoking `showContextMenu`; the native menu and all OS operations are owned by main. Both paths can surface errors through `App`'s shared error state.
 
 ## TypeScript layout
 
@@ -78,7 +80,7 @@ Each project has an `outDir` under `node_modules/.tmp` because `composite: true`
 
 ### Shared types
 
-`src/shared/types.ts` is the IPC contract. It defines `FileEntry` (one row in the list), `Crumb` (one breadcrumb segment: `name` + absolute `path`), `DirResult` (what `fs:readDir` returns, including `breadcrumbs: Crumb[]`), and `ThemeFamily` (`'default' | 'catppuccin'`, a renderer-only type shared with `Toolbar`). It is imported by:
+`src/shared/types.ts` is the IPC contract. It defines `FileEntry` (one row in the list), `Crumb` (one breadcrumb segment: `name` + absolute `path`), `DirResult` (what `fs:readDir` returns, including `breadcrumbs: Crumb[]`), `ContextMenuTarget` (`path` + `isDirectory`, sent by a right-click), and `ThemeFamily` (`'default' | 'catppuccin'`, a renderer-only type shared with `Toolbar`). It is imported by:
 
 - `src/main/index.ts`, which builds the objects and annotates the handler return type.
 - `src/preload/index.ts`, which types the bridge functions.
@@ -96,10 +98,11 @@ Because all three read the same interface, changing a field in the main process 
 | `system:getAccentColor`  | Renderer → Main | none                                        | `#RRGGBB` or `null` on non-macOS                    |
 | `system:accent-changed`  | Main → Renderer | Accent colour or `null`                     | Delivered via `window.fileApi.onAccentColorChanged` |
 | `shell:showItemInFolder` | Renderer → Main | Absolute file or folder path                | Nothing, or an error message                        |
+| `shell:showContextMenu`  | Renderer → Main | `{ path, isDirectory }`                     | Nothing, or an error message                        |
 
 `system:getAccentColor` is called once on mount to seed the renderer. Live changes use the one main → renderer channel: on macOS the main process subscribes to `AppleAquaColorVariantChanged`, `AppleColorPreferencesChangedNotification`, and `AppleInterfaceThemeChangedNotification`, then re-reads the accent **100 ms later** (the notification can arrive before macOS has written the new value) and pushes it only if it differs from the last value sent. Electron's `accent-color-changed` event is Windows/Linux only, so it cannot be used on macOS.
 
-`fs:readDir` rejects with `Invalid folder path` if the argument is not a string or is not absolute, and with `Invalid showHidden flag` if the second argument is not a boolean. Hidden entries (names starting with `.`) are filtered out before `fs.stat` when `showHidden` is false. `shell:openPath` rejects with `Invalid file path` for the same path checks, or with the OS error message if the file cannot be opened (for example, no application is associated with the file). `shell:showItemInFolder` checks the same way and rejects with `Invalid file selected`; unlike `openPath`, it returns `void` synchronously, so there is no OS error string to inspect.
+`fs:readDir` rejects with `Invalid folder path` if the argument is not a string or is not absolute, and with `Invalid showHidden flag` if the second argument is not a boolean. Hidden entries (names starting with `.`) are filtered out before `fs.stat` when `showHidden` is false. `shell:openPath` rejects with `Invalid file path` for the same path checks, or with the OS error message if the file cannot be opened (for example, no application is associated with the file). `shell:showItemInFolder` checks the same way and rejects with `Invalid file selected`; unlike `openPath`, it returns `void` synchronously, so there is no OS error string to inspect. `shell:showContextMenu` validates the whole target object before building a native `Menu`: the path must be absolute and `isDirectory` must be a boolean.
 
 ## The item data shape
 
@@ -145,6 +148,16 @@ If the user navigates again before the first request finishes, the cleanup funct
 6. If the OS returns an error message, the main process throws it and `App` shows the message in the error state.
 
 `shell.openPath` does **not** mean "open Finder". Finder is a file manager, not the default handler for files. To reveal a file in the file manager instead, Electron provides `shell.showItemInFolder`.
+
+## Context menu
+
+Right-clicking a row does not build a menu in React. `FileItem` calls `window.fileApi.showContextMenu({ path, isDirectory })`, and main builds a native `Menu` with three actions:
+
+- **Open** (`Open folder` for directories) → `shell.openPath`
+- **Reveal in file manager** → `shell.showItemInFolder`
+- **Copy path** → `clipboard.writeText`
+
+Keeping the menu in main means `shell` and `clipboard` never enter the renderer, consistent with the rest of the IPC boundary. The details-panel Reveal button remains for keyboard users, since a context menu is pointer-only.
 
 ## Diagram
 

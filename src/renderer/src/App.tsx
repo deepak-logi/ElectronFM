@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Toolbar from './components/Toolbar'
 import FileList from './components/FileList'
 import DetailsPanel from './components/DetailsPanel'
-import type { Crumb, FileEntry, ThemeFamily } from '../../shared/types'
+import type { ContextMenuTarget, Crumb, FileEntry, ThemeFamily } from '../../shared/types'
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState('')
@@ -115,6 +115,12 @@ export default function App() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Unknown error'))
   }
 
+  function handleShowMenu(target: ContextMenuTarget) {
+    window.fileApi
+      .showContextMenu(target)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Unknown error'))
+  }
+
   return (
     <div className="app">
       <Toolbar
@@ -147,7 +153,7 @@ export default function App() {
               selected={selected}
               onSelect={setSelected}
               onOpen={handleOpen}
-              onReveal={handleReveal}
+              onShowMenu={handleShowMenu}
             />
           )}
         </section>

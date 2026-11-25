@@ -1,5 +1,5 @@
 import { createElement } from 'react'
-import type { FileEntry } from '../../../shared/types'
+import type { ContextMenuTarget, FileEntry } from '../../../shared/types'
 import { getFileIcon } from '../utils/fileIcons'
 
 interface FileItemProps {
@@ -7,10 +7,16 @@ interface FileItemProps {
   isSelected: boolean
   onSelect: (item: FileEntry) => void
   onOpen: (item: FileEntry) => void
-  onReveal: (path: string) => void
+  onShowMenu: (target: ContextMenuTarget) => void
 }
 
-export default function FileItem({ item, isSelected, onSelect, onOpen, onReveal }: FileItemProps) {
+export default function FileItem({
+  item,
+  isSelected,
+  onSelect,
+  onOpen,
+  onShowMenu
+}: FileItemProps) {
   // createElement keeps the icon a stable, module-level component instead of a
   // component variable created during render (which react-hooks flags).
   const icon = createElement(getFileIcon(item), {
@@ -30,7 +36,7 @@ export default function FileItem({ item, isSelected, onSelect, onOpen, onReveal 
       onKeyDown={(event) => event.key === 'Enter' && onOpen(item)}
       onContextMenu={(event) => {
         event.preventDefault()
-        onReveal(item.path)
+        onShowMenu({ path: item.path, isDirectory: item.isDirectory })
       }}
     >
       {icon}

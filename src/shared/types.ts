@@ -15,6 +15,11 @@ export interface Crumb {
   path: string
 }
 
+export interface ContextMenuTarget {
+  path: string
+  isDirectory: boolean
+}
+
 export interface DirResult {
   path: string
   parent: string | null

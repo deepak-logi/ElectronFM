@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { DirResult } from '../shared/types'
+import type { ContextMenuTarget, DirResult } from '../shared/types'
 
 contextBridge.exposeInMainWorld('fileApi', {
   getHomeDir: (): Promise<string> => ipcRenderer.invoke('fs:getHomeDir'),
@@ -18,5 +18,8 @@ contextBridge.exposeInMainWorld('fileApi', {
   },
 
   showItemInFolder: (filePath: string): Promise<void> =>
-    ipcRenderer.invoke('shell:showItemInFolder', filePath)
+    ipcRenderer.invoke('shell:showItemInFolder', filePath),
+
+  showContextMenu: (target: ContextMenuTarget): Promise<void> =>
+    ipcRenderer.invoke('shell:showContextMenu', target)
 })

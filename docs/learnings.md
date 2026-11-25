@@ -124,6 +124,12 @@ That is wrong. `shell.openPath` returns `Promise<string>` whose resolved value i
 
 The UI exposes this through a details-panel button and a right-click on a file row. The button is keyboard-accessible; the context menu is a convenience, not the only way to reach the feature.
 
+### Native context menus belong in main
+
+A right-click initially just called `showItemInFolder` directly, which was confusing: the two useful folder actions are different. `shell.openPath(folder)` opens that folder itself, while `shell.showItemInFolder(folder)` opens its parent and selects it — the Finder distinction between **Open** and **Show in Finder**.
+
+The menu is now built in the main process with `Menu.buildFromTemplate` after the renderer sends a `ContextMenuTarget`. That keeps `shell` and `clipboard` behind the bridge and makes the menu look native. The target is typed for the renderer but still validated as `unknown` in main: an object with an absolute path and a boolean `isDirectory`. The details-panel button stays because a context menu cannot be reached with a keyboard.
+
 ### `Dirent.isDirectory()` does not follow symlinks
 
 `fs.readdir(..., { withFileTypes: true })` returns `Dirent` objects. For a symlink, `entry.isDirectory()` is `false` even when the link points to a folder. Since I already call `fs.stat` (which follows links), using `stats.isDirectory()` makes symlinked folders navigable instead of sending them to `openPath`.
