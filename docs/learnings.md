@@ -286,6 +286,12 @@ Enabling `allowJs` for a gradual migration caused five `TS5055: Cannot write fil
 
 electron-vite transpiles TypeScript through esbuild without checking types, so `npm run build` succeeding says nothing about type correctness. `npm run typecheck` is the gate. Same story for `src/renderer/index.html`: after renaming `main.jsx` to `main.tsx`, the HTML script tag still pointed at the old path, which neither TypeScript nor ESLint sees. Only a real build/dev run catches that.
 
+### A shared type turns a contract change into a compiler error
+
+Adding `breadcrumbs: Crumb[]` to `DirResult` immediately broke the `fs:readDir` handler's return in `src/main/index.ts`, before any UI code was written. That is the practical value of keeping the IPC contract in one file: main, preload, and React all import the same interface, so adding a field forces every producer to supply it. Without it, the renderer would simply receive `undefined` and fail much later, in a component.
+
+Building the breadcrumbs in main was also the right layer: the renderer has no `path` module, and roots and separators differ between macOS and Windows.
+
 ## SCSS and styling
 
 ### `@use` is scoped, `@import` is not
@@ -320,6 +326,8 @@ Two related details: `lucide-react` tree-shakes correctly (unused icons are abse
 ### BEM keeps the nesting shallow
 
 Nesting with `&` is convenient but easy to overuse. Limiting it to block, element, and modifier (`file-item`, `&__name`, `&--selected`) means every selector stays at most two classes deep, which keeps specificity flat and makes styles easy to grep from the JSX.
+
+Getting the separator wrong is an easy silent bug: `&_segment` compiles to `.breadcrumbs_segment`, but the JSX renders `.breadcrumbs__segment`. TypeScript, ESLint, and Sass all pass because the CSS is still syntactically valid — the rule simply never matches. Checking the compiled selector against the rendered class name is the only reliable verification.
 
 ### A theme toggle needs a persistent CSS hook
 
@@ -357,4 +365,3 @@ The same block originally mixed up the two `color-mix()` ratios: an 88% accent m
 - Should `typecheck` and `lint` run in a pre-commit hook or CI?
 - Should the shared `FileEntry` type live in `src/shared` or be generated from the IPC schema?
 - Would CSS Modules scale better than global BEM once the component count grows?
-- Should breadcrumbs be built in the main process (where `path` is available) or derived in React?

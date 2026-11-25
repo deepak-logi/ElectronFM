@@ -10,10 +10,16 @@ export interface FileEntry {
   extension: string
 }
 
+export interface Crumb {
+  name: string
+  path: string
+}
+
 export interface DirResult {
   path: string
   parent: string | null
   items: FileEntry[]
+  breadcrumbs: Crumb[]
 }
 
 export type ThemeFamily = 'default' | 'catppuccin'

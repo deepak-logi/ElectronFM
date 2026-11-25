@@ -30,6 +30,7 @@ styles/
 │   └── _app.scss          # app shell grid
 ├── components/
 │   ├── _toolbar.scss
+│   ├── _breadcrumbs.scss
 │   ├── _file-list.scss
 │   ├── _file-item.scss
 │   ├── _details-panel.scss
@@ -177,7 +178,7 @@ The shell is two nested grids:
 | `outline: none`                                          | `@include focus-ring` on `:focus-visible`     |
 | Inline `style={{ ... }}` for static styling              | A class                                       |
 
-BEM here is deliberately shallow: block (`file-item`), element (`file-item__name`), modifier (`file-item--selected`). No utility classes.
+BEM here is deliberately shallow: block (`file-item`), element (`file-item__name`), modifier (`file-item--selected`). No utility classes. The breadcrumb bar follows the same pattern: `breadcrumbs`, `breadcrumbs__segment`, `breadcrumbs__separator`, `breadcrumbs__link`, `breadcrumbs__link--current`. Its `flex: 1` / `min-width: 0` / `overflow-x: auto` combination keeps long paths scrollable instead of widening the toolbar.
 
 ## Adding a component
 

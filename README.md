@@ -26,6 +26,7 @@ A small desktop file manager built with Electron and React. It browses the local
 - Switch between the default palette and Catppuccin; the OS still decides light or dark (Latte / Mocha).
 - In the default palette, file selection and focus colours follow the macOS accent color live.
 - Reveal a selected file in the system file manager from the details panel or a right-click.
+- Clickable breadcrumb path; click any ancestor segment to jump back to it.
 - Loading, error, and empty-folder states.
 
 **Not implemented (out of scope for this build)**
@@ -217,7 +218,6 @@ Builds are currently **unsigned** and **not notarized**. Locally built apps run 
 
 - Search/filter in the current folder.
 - Sort by name, size, or date, plus a Name / Size / Modified header row.
-- Clickable breadcrumb path, built with `path.dirname` in the main process.
 - Create folder.
 - Keyboard navigation and shortcuts.
 - Virtualized file list for huge folders.

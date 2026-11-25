@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowUp, Eye, EyeOff, Palette } from 'lucide-react'
-import type { ThemeFamily } from '../../../shared/types'
+import type { Crumb, ThemeFamily } from '../../../shared/types'
 
 interface ToolbarProps {
   currentPath: string
@@ -11,6 +11,8 @@ interface ToolbarProps {
   onToggleHidden: () => void
   themeFamily: ThemeFamily
   onToggleTheme: () => void
+  breadcrumbs: Crumb[]
+  onNavigate: (path: string) => void
 }
 
 export default function Toolbar({
@@ -22,7 +24,9 @@ export default function Toolbar({
   showHidden,
   onToggleHidden,
   themeFamily,
-  onToggleTheme
+  onToggleTheme,
+  breadcrumbs,
+  onNavigate
 }: ToolbarProps) {
   return (
     <header className="toolbar">
@@ -66,9 +70,43 @@ export default function Toolbar({
       >
         <Palette size={18} aria-hidden />
       </button>
-      <span className="toolbar__path" title={currentPath}>
-        {currentPath || 'Loading…'}
-      </span>
+      {breadcrumbs.length === 0 ? (
+        <span className="toolbar__path" title={currentPath}>
+          {currentPath || 'Loading...'}
+        </span>
+      ) : (
+        <nav className="breadcrumbs" aria-label="Breadcrumb">
+          {breadcrumbs.map((crumb, index) => {
+            const isCurrent = index === breadcrumbs.length - 1
+            return (
+              <span className="breadcrumbs__segment" key={crumb.path}>
+                {index > 0 && (
+                  <span className="breadcrumbs__separator" aria-hidden>
+                    ›
+                  </span>
+                )}
+                {isCurrent ? (
+                  <span
+                    className="breadcrumbs__link breadcrumbs__link--current"
+                    aria-current="page"
+                  >
+                    {crumb.name}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="breadcrumbs__link"
+                    onClick={() => onNavigate(crumb.path)}
+                    title={crumb.path}
+                  >
+                    {crumb.name}
+                  </button>
+                )}
+              </span>
+            )
+          })}
+        </nav>
+      )}
     </header>
   )
 }

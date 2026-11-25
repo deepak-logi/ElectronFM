@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Toolbar from './components/Toolbar'
 import FileList from './components/FileList'
 import DetailsPanel from './components/DetailsPanel'
-import type { FileEntry, ThemeFamily } from '../../shared/types'
+import type { Crumb, FileEntry, ThemeFamily } from '../../shared/types'
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState('')
@@ -14,6 +14,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [showHidden, setShowHidden] = useState(false)
   const [systemAccent, setSystemAccent] = useState<string | null>(null)
+  const [breadcrumbs, setBreadcrumbs] = useState<Crumb[]>([])
 
   useEffect(() => {
     let active = true
@@ -67,6 +68,7 @@ export default function App() {
     setLoading(true)
     setError('')
     setSelected(null)
+    setBreadcrumbs([])
 
     window.fileApi
       .readDir(currentPath, showHidden)
@@ -74,6 +76,7 @@ export default function App() {
         if (cancelled) return
         setItems(result.items)
         setParentPath(result.parent)
+        setBreadcrumbs(result.breadcrumbs)
       })
       .catch(
         (err: unknown) =>
@@ -126,6 +129,8 @@ export default function App() {
         onToggleTheme={() =>
           setThemeFamily((prev) => (prev === 'default' ? 'catppuccin' : 'default'))
         }
+        breadcrumbs={breadcrumbs}
+        onNavigate={navigateTo}
       />
 
       <main className="content">

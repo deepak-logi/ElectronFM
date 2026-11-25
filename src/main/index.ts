@@ -4,7 +4,7 @@ import icon from '../../resources/icon.png?asset'
 import path, { join } from 'node:path'
 import fs from 'node:fs/promises'
 import os from 'node:os'
-import type { DirResult, FileEntry } from '../shared/types'
+import type { Crumb, DirResult, FileEntry } from '../shared/types'
 
 // In development the process is still Electron's binary, so the Dock tooltip
 // says "Electron". The packaged app gets its name from Info.plist instead.
@@ -53,7 +53,12 @@ ipcMain.handle(
       .sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name)) // converting to Number, since req for arithmetic operation
 
     const parent = path.dirname(dirPath)
-    return { path: dirPath, parent: parent !== dirPath ? parent : null, items: sorted }
+    return {
+      path: dirPath,
+      parent: parent !== dirPath ? parent : null,
+      items: sorted,
+      breadcrumbs: buildBreadcrumbs(dirPath)
+    }
   }
 )
 
@@ -80,6 +85,26 @@ ipcMain.handle('shell:showItemInFolder', async (_event, filePath: unknown): Prom
   }
   shell.showItemInFolder(filePath)
 })
+
+function buildBreadcrumbs(dirPath: string): Crumb[] {
+  const { root } = path.parse(dirPath)
+  const home = os.homedir()
+  const crumbs: Crumb[] = []
+
+  let current = dirPath
+  while (current !== root) {
+    crumbs.push({
+      name: current === home ? 'Home' : path.basename(current),
+      path: current
+    })
+    const parent = path.dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+
+  crumbs.push({ name: root, path: root })
+  return crumbs.reverse()
+}
 
 function createWindow() {
   // Create the browser window.

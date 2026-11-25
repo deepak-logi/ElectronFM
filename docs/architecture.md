@@ -78,7 +78,7 @@ Each project has an `outDir` under `node_modules/.tmp` because `composite: true`
 
 ### Shared types
 
-`src/shared/types.ts` is the IPC contract. It defines `FileEntry` (one row in the list), `DirResult` (what `fs:readDir` returns), and `ThemeFamily` (`'default' | 'catppuccin'`, a renderer-only type shared with `Toolbar`). It is imported by:
+`src/shared/types.ts` is the IPC contract. It defines `FileEntry` (one row in the list), `Crumb` (one breadcrumb segment: `name` + absolute `path`), `DirResult` (what `fs:readDir` returns, including `breadcrumbs: Crumb[]`), and `ThemeFamily` (`'default' | 'catppuccin'`, a renderer-only type shared with `Toolbar`). It is imported by:
 
 - `src/main/index.ts`, which builds the objects and annotates the handler return type.
 - `src/preload/index.ts`, which types the bridge functions.
@@ -116,15 +116,21 @@ Each entry returned by `fs:readDir` is a `FileEntry` (defined in `src/shared/typ
 
 Entries are sorted with **folders first**, then by name using `localeCompare`. Entries whose `fs.stat` fails are skipped instead of failing the whole folder.
 
+## Breadcrumbs
+
+`buildBreadcrumbs` in the main process walks upward from the requested folder until it reaches `path.parse(dirPath).root`, collecting `{ name, path }` pairs and reversing them so the root comes first. The user's home folder is labelled `Home`. This belongs in main because the renderer has no `path` module and Windows paths use a different separator and root.
+
+`fs:readDir` returns the segments as part of `DirResult`. `App` stores them in state and passes them to `Toolbar`, which renders every ancestor as a button and the last segment as plain text with `aria-current="page"`. Clicking a button reuses `navigateTo`, so breadcrumb navigation goes through the same history logic as Back and Up.
+
 ## Walkthrough: double-clicking a folder
 
 1. `FileItem` fires `onDoubleClick` and calls `onOpen(item)`.
 2. `App.handleOpen(item)` sees `item.isDirectory === true` and calls `navigateTo(item.path)`.
 3. `navigateTo` pushes the current path onto `history` and sets `currentPath` to the new folder.
 4. The `useEffect` that depends on `currentPath` and `showHidden` runs. It marks the request as not cancelled, sets `loading`, clears the previous error and selection, and calls `window.fileApi.readDir(currentPath, showHidden)`.
-5. The preload calls `ipcRenderer.invoke('fs:readDir', currentPath)`.
-6. The main process validates the path and the boolean flag, runs `fs.readdir(..., { withFileTypes: true })`, skips dot-prefixed entries when hidden files are off, calls `fs.stat` for each remaining entry, sorts the results, computes the parent path, and returns `{ path, parent, items }`.
-7. Back in React, `setItems(result.items)` and `setParentPath(result.parent)` update the UI, and `loading` becomes `false`.
+5. The preload calls `ipcRenderer.invoke('fs:readDir', currentPath, showHidden)`.
+6. The main process validates the path and the boolean flag, runs `fs.readdir(..., { withFileTypes: true })`, skips dot-prefixed entries when hidden files are off, calls `fs.stat` for each remaining entry, sorts the results, computes the parent path, builds the breadcrumb segments with `buildBreadcrumbs` (using `path.parse().root`, `path.basename`, and `path.dirname`), and returns `{ path, parent, items, breadcrumbs }`.
+7. Back in React, `setItems(result.items)`, `setParentPath(result.parent)`, and `setBreadcrumbs(result.breadcrumbs)` update the UI, and `loading` becomes `false`.
 8. `FileList` re-renders the new items. `DetailsPanel` continues to show its empty state, because selection was already cleared in step 4.
 
 If the user navigates again before the first request finishes, the cleanup function sets `cancelled = true`, so the stale response is ignored. This prevents an older, slower folder from overwriting a newer one.
@@ -187,6 +193,7 @@ All state lives in `App.tsx`:
 | `showHidden`   | Whether dot-prefixed entries are included; also an effect dependency for reloading                        |
 | `themeFamily`  | `'default'` or `'catppuccin'`, persisted in `localStorage` and written to `data-theme-family` on `<html>` |
 | `systemAccent` | Last accent reported by macOS, or `null`; written to `--accent-source` on `<html>`                        |
+| `breadcrumbs`  | Ancestor segments of the current folder; cleared while loading and passed to `Toolbar` for navigation     |
 
 Child components are intentionally stateless. This keeps the data flow one-directional and makes it obvious where a bug lives: if the UI is wrong, check the props `App` passed down.
 
