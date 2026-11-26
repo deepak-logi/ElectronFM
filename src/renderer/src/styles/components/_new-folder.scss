@@ -1,0 +1,25 @@
+@use '../abstracts' as *;
+
+.new-folder {
+  @include flex-center(space(2));
+  padding: space(2) space(3);
+
+  &__input {
+    flex: 1;
+    min-width: 0;
+    padding: space(1) space(2);
+    border: 1px solid var(--color-accent);
+    border-radius: $radius-sm;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font: inherit;
+
+    &::placeholder {
+      color: var(--color-text-muted);
+    }
+
+    &:focus-visible {
+      @include focus-ring;
+    }
+  }
+}

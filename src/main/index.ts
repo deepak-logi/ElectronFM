@@ -86,7 +86,7 @@ ipcMain.handle('shell:showItemInFolder', async (_event, filePath: unknown): Prom
   shell.showItemInFolder(filePath)
 })
 
-ipcMain.handle('shell:showContextMenu', (_event, target: unknown): void => {
+ipcMain.handle('shell:showContextMenu', (event, target: unknown): void => {
   if (typeof target !== 'object' || target === null) {
     throw new Error('Invalid context menu target')
   }
@@ -106,6 +106,14 @@ ipcMain.handle('shell:showContextMenu', (_event, target: unknown): void => {
         void shell.openPath(itemPath)
       }
     },
+    ...(isDirectory
+      ? [
+          {
+            label: 'New Folder Inside',
+            click: () => event.sender.send('ui:request-new-folder', itemPath)
+          }
+        ]
+      : []),
     {
       label: 'Reveal in file manager',
       click: () => shell.showItemInFolder(itemPath)
@@ -139,6 +147,36 @@ function buildBreadcrumbs(dirPath: string): Crumb[] {
   crumbs.push({ name: root, path: root })
   return crumbs.reverse()
 }
+
+ipcMain.handle(
+  'fs:createFolder',
+  async (_event, parentPath: unknown, name: unknown): Promise<string> => {
+    if (typeof parentPath !== 'string' || !path.isAbsolute(parentPath)) {
+      throw new Error('Invalid folder path')
+    }
+    if (
+      typeof name !== 'string' ||
+      !name.trim() ||
+      name === '.' ||
+      name === '..' ||
+      /[\\/]/.test(name) ||
+      name !== path.basename(name)
+    ) {
+      throw new Error('Invalid folder name')
+    }
+
+    const folderPath = path.join(parentPath, name)
+    try {
+      await fs.mkdir(folderPath)
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new Error('A folder with that name already exists', { cause: err })
+      }
+      throw err
+    }
+    return folderPath
+  }
+)
 
 function createWindow() {
   // Create the browser window.

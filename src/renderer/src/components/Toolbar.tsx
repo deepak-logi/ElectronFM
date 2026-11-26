@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowUp, Eye, EyeOff, Palette } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Eye, EyeOff, FolderPlus, Palette } from 'lucide-react'
 import type { Crumb, ThemeFamily } from '../../../shared/types'
 
 interface ToolbarProps {
@@ -13,6 +13,7 @@ interface ToolbarProps {
   onToggleTheme: () => void
   breadcrumbs: Crumb[]
   onNavigate: (path: string) => void
+  onNewFolder: () => void
 }
 
 export default function Toolbar({
@@ -26,7 +27,8 @@ export default function Toolbar({
   themeFamily,
   onToggleTheme,
   breadcrumbs,
-  onNavigate
+  onNavigate,
+  onNewFolder
 }: ToolbarProps) {
   return (
     <header className="toolbar">
@@ -39,6 +41,7 @@ export default function Toolbar({
       >
         <ArrowLeft size={18} aria-hidden />
       </button>
+
       <button
         type="button"
         className="toolbar__button"
@@ -48,6 +51,7 @@ export default function Toolbar({
       >
         <ArrowUp size={18} aria-hidden />
       </button>
+
       <button
         type="button"
         className={`toolbar__button${showHidden ? ' toolbar__button--active' : ''}`}
@@ -58,6 +62,7 @@ export default function Toolbar({
       >
         {showHidden ? <EyeOff size={18} aria-hidden /> : <Eye size={18} aria-hidden />}
       </button>
+
       <button
         type="button"
         className={`toolbar__button${themeFamily === 'catppuccin' ? ' toolbar__button--active' : ''}`}
@@ -70,6 +75,17 @@ export default function Toolbar({
       >
         <Palette size={18} aria-hidden />
       </button>
+
+      <button
+        type="button"
+        className="toolbar__button"
+        onClick={onNewFolder}
+        aria-label="New Folder"
+        title="New Folder"
+      >
+        <FolderPlus size={18} aria-hidden />
+      </button>
+
       {breadcrumbs.length === 0 ? (
         <span className="toolbar__path" title={currentPath}>
           {currentPath || 'Loading...'}

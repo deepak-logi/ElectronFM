@@ -21,5 +21,14 @@ contextBridge.exposeInMainWorld('fileApi', {
     ipcRenderer.invoke('shell:showItemInFolder', filePath),
 
   showContextMenu: (target: ContextMenuTarget): Promise<void> =>
-    ipcRenderer.invoke('shell:showContextMenu', target)
+    ipcRenderer.invoke('shell:showContextMenu', target),
+
+  createFolder: (parentPath: string, name: string): Promise<string> =>
+    ipcRenderer.invoke('fs:createFolder', parentPath, name),
+
+  onNewFolderRequested: (callback: (parentPath: string) => void): (() => void) => {
+    const listener = (_event: unknown, parentPath: string) => callback(parentPath)
+    ipcRenderer.on('ui:request-new-folder', listener)
+    return () => ipcRenderer.removeListener('ui:request-new-folder', listener)
+  }
 })

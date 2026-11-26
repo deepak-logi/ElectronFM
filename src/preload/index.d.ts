@@ -13,6 +13,8 @@ declare global {
       onAccentColorChanged: (callback: (color: string | null) => void) => () => void
       showItemInFolder: (filePath: string) => Promise<void>
       showContextMenu: (target: ContextMenuTarget) => Promise<void>
+      createFolder: (parentPath: string, name: string) => Promise<string>
+      onNewFolderRequested: (callback: (parentPath: string) => void) => () => void
     }
   }
 }

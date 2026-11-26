@@ -11,7 +11,14 @@ import {
   selectCanGoUp,
   setCurrentPath
 } from './features/navigationSlice'
-import { loadDirectory, reportError, selectItem } from './features/filesSlice'
+import {
+  beginCreateFolder,
+  cancelCreateFolder,
+  createFolder,
+  loadDirectory,
+  reportError,
+  selectItem
+} from './features/filesSlice'
 import { setSystemAccent, setThemeFamily, toggleHidden } from './features/settingsSlice'
 
 export default function App() {
@@ -29,6 +36,7 @@ export default function App() {
   const selected = useAppSelector((s) => s.files.selected)
   const loading = useAppSelector((s) => s.files.loading)
   const error = useAppSelector((s) => s.files.error)
+  const isCreatingFolder = useAppSelector((s) => s.files.isCreatingFolder)
 
   const dispatch = useAppDispatch()
 
@@ -48,6 +56,16 @@ export default function App() {
       unsubscribe()
     }
   }, [dispatch])
+
+  useEffect(() => {
+    const unsubscribe = window.fileApi.onNewFolderRequested((parentPath) => {
+      // Right-clicking a folder asks for a new folder inside it. Navigate first
+      // so the input row appears in the correct directory once it has loaded.
+      if (parentPath !== currentPath) dispatch(navigate(parentPath))
+      dispatch(beginCreateFolder())
+    })
+    return unsubscribe
+  }, [currentPath, dispatch])
 
   useEffect(() => {
     const root = document.documentElement
@@ -113,6 +131,15 @@ export default function App() {
       )
   }
 
+  function handleCreateFolder(name: string) {
+    dispatch(createFolder({ parentPath: currentPath, name }))
+      .unwrap()
+      .then(() => dispatch(loadDirectory({ path: currentPath, showHidden })))
+      .catch(() => {
+        // The thunk's rejected action has already put the message in the store.
+      })
+  }
+
   return (
     <div className="app">
       <Toolbar
@@ -129,6 +156,7 @@ export default function App() {
         }
         breadcrumbs={breadcrumbs}
         onNavigate={navigateTo}
+        onNewFolder={() => dispatch(beginCreateFolder())}
       />
 
       <main className="content">
@@ -146,6 +174,9 @@ export default function App() {
               onSelect={(item) => dispatch(selectItem(item))}
               onOpen={handleOpen}
               onShowMenu={handleShowMenu}
+              isCreating={isCreatingFolder}
+              onCreate={handleCreateFolder}
+              onCancel={() => dispatch(cancelCreateFolder())}
             />
           )}
         </section>

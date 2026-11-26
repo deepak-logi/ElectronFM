@@ -27,7 +27,7 @@ It also keeps the existing electron-vite behaviour: load the dev server URL in d
 
 ### Preload
 
-`src/preload/index.ts` exposes seven functions:
+`src/preload/index.ts` exposes nine functions:
 
 ```ts
 contextBridge.exposeInMainWorld('fileApi', {
@@ -44,11 +44,18 @@ contextBridge.exposeInMainWorld('fileApi', {
   showItemInFolder: (filePath: string): Promise<void> =>
     ipcRenderer.invoke('shell:showItemInFolder', filePath),
   showContextMenu: (target: ContextMenuTarget): Promise<void> =>
-    ipcRenderer.invoke('shell:showContextMenu', target)
+    ipcRenderer.invoke('shell:showContextMenu', target),
+  createFolder: (parentPath: string, name: string): Promise<string> =>
+    ipcRenderer.invoke('fs:createFolder', parentPath, name),
+  onNewFolderRequested: (callback: (parentPath: string) => void): (() => void) => {
+    const listener = (_event: unknown, parentPath: string) => callback(parentPath)
+    ipcRenderer.on('ui:request-new-folder', listener)
+    return () => ipcRenderer.removeListener('ui:request-new-folder', listener)
+  }
 })
 ```
 
-It never exposes `ipcRenderer` itself. The renderer can only call these seven operations — it cannot invent new IPC channels or reach Node APIs. `onAccentColorChanged` is the one push-based API: it wraps `ipcRenderer.on` and hands back only an unsubscribe function. `src/preload/index.d.ts` declares this shape as `Window.fileApi`, so the renderer gets autocomplete and compile-time checking on the bridge.
+It never exposes `ipcRenderer` itself. The renderer can only call these nine operations — it cannot invent new IPC channels or reach Node APIs. `onAccentColorChanged` is the one push-based API: it wraps `ipcRenderer.on` and hands back only an unsubscribe function. `src/preload/index.d.ts` declares this shape as `Window.fileApi`, so the renderer gets autocomplete and compile-time checking on the bridge.
 
 ### Renderer
 
@@ -99,10 +106,12 @@ Because all three read the same interface, changing a field in the main process 
 | `system:accent-changed`  | Main → Renderer | Accent colour or `null`                     | Delivered via `window.fileApi.onAccentColorChanged` |
 | `shell:showItemInFolder` | Renderer → Main | Absolute file or folder path                | Nothing, or an error message                        |
 | `shell:showContextMenu`  | Renderer → Main | `{ path, isDirectory }`                     | Nothing, or an error message                        |
+| `fs:createFolder`        | Renderer → Main | Absolute parent path + folder name          | Created folder's absolute path                      |
+| `ui:request-new-folder`  | Main → Renderer | Absolute parent path                        | Delivered via `window.fileApi.onNewFolderRequested` |
 
 `system:getAccentColor` is called once on mount to seed the renderer. Live changes use the one main → renderer channel: on macOS the main process subscribes to `AppleAquaColorVariantChanged`, `AppleColorPreferencesChangedNotification`, and `AppleInterfaceThemeChangedNotification`, then re-reads the accent **100 ms later** (the notification can arrive before macOS has written the new value) and pushes it only if it differs from the last value sent. Electron's `accent-color-changed` event is Windows/Linux only, so it cannot be used on macOS.
 
-`fs:readDir` rejects with `Invalid folder path` if the argument is not a string or is not absolute, and with `Invalid showHidden flag` if the second argument is not a boolean. Hidden entries (names starting with `.`) are filtered out before `fs.stat` when `showHidden` is false. `shell:openPath` rejects with `Invalid file path` for the same path checks, or with the OS error message if the file cannot be opened (for example, no application is associated with the file). `shell:showItemInFolder` checks the same way and rejects with `Invalid file selected`; unlike `openPath`, it returns `void` synchronously, so there is no OS error string to inspect. `shell:showContextMenu` validates the whole target object before building a native `Menu`: the path must be absolute and `isDirectory` must be a boolean.
+`fs:readDir` rejects with `Invalid folder path` if the argument is not a string or is not absolute, and with `Invalid showHidden flag` if the second argument is not a boolean. Hidden entries (names starting with `.`) are filtered out before `fs.stat` when `showHidden` is false. `shell:openPath` rejects with `Invalid file path` for the same path checks, or with the OS error message if the file cannot be opened (for example, no application is associated with the file). `shell:showItemInFolder` checks the same way and rejects with `Invalid file selected`; unlike `openPath`, it returns `void` synchronously, so there is no OS error string to inspect. `shell:showContextMenu` validates the whole target object before building a native `Menu`: the path must be absolute and `isDirectory` must be a boolean. `fs:createFolder` validates both arguments: the parent must be an absolute path and the name must be a non-empty single path component (no `.`/`..` or separators). An existing entry produces `A folder with that name already exists`.
 
 ## The item data shape
 
@@ -151,13 +160,18 @@ If the user navigates again before the first request finishes, both slices compa
 
 ## Context menu
 
-Right-clicking a row does not build a menu in React. `FileItem` calls `window.fileApi.showContextMenu({ path, isDirectory })`, and main builds a native `Menu` with three actions:
+Right-clicking a row does not build a menu in React. `FileItem` calls `window.fileApi.showContextMenu({ path, isDirectory })`, and main builds a native `Menu` with these actions:
 
 - **Open** (`Open folder` for directories) → `shell.openPath`
+- **New Folder Inside** (directories only) → main sends `ui:request-new-folder` with the folder's path; the renderer navigates there if needed and dispatches `beginCreateFolder` to open the inline input row
 - **Reveal in file manager** → `shell.showItemInFolder`
 - **Copy path** → `clipboard.writeText`
 
-Keeping the menu in main means `shell` and `clipboard` never enter the renderer, consistent with the rest of the IPC boundary. The details-panel Reveal button remains for keyboard users, since a context menu is pointer-only.
+Keeping the menu in main means `shell` and `clipboard` never enter the renderer, consistent with the rest of the IPC boundary. `ui:request-new-folder` is a main → renderer push, wrapped by preload as `onNewFolderRequested` so `ipcRenderer` is still never exposed. The toolbar's New Folder button and the details-panel Reveal button remain for keyboard users, since a context menu is pointer-only.
+
+### Creating a folder
+
+Whether triggered by the toolbar button or the context menu, the flow is the same. `filesSlice` holds `isCreatingFolder`; `FileList` renders `NewFolderRow` with an inline input. Enter dispatches the `createFolder` thunk, which calls `window.fileApi.createFolder(currentPath, name)`. On success the thunk closes the row, `App` re-dispatches `loadDirectory`, and the new folder appears. Escape or blur cancels; a rejected name keeps the row open and puts the error in the shared error banner.
 
 ## Diagram
 
@@ -194,11 +208,11 @@ sequenceDiagram
 
 Renderer state lives in three Redux Toolkit slices, not in `App.tsx`:
 
-| Slice        | State                                                              | Actions                                                     |
-| ------------ | ------------------------------------------------------------------ | ----------------------------------------------------------- |
-| `files`      | `items`, `selected`, `loading`, `error`, `requestId`               | `selectItem`, `reportError`, plus the `loadDirectory` thunk |
-| `navigation` | `currentPath`, `parentPath`, `history`, `breadcrumbs`, `requestId` | `setCurrentPath`, `navigate`, `goBack`                      |
-| `settings`   | `showHidden`, `themeFamily`, `systemAccent`                        | `toggleHidden`, `setThemeFamily`, `setSystemAccent`         |
+| Slice        | State                                                                    | Actions                                                                                                                |
+| ------------ | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `files`      | `items`, `selected`, `loading`, `error`, `requestId`, `isCreatingFolder` | `selectItem`, `reportError`, `beginCreateFolder`, `cancelCreateFolder`, plus `loadDirectory` and `createFolder` thunks |
+| `navigation` | `currentPath`, `parentPath`, `history`, `breadcrumbs`, `requestId`       | `setCurrentPath`, `navigate`, `goBack`                                                                                 |
+| `settings`   | `showHidden`, `themeFamily`, `systemAccent`                              | `toggleHidden`, `setThemeFamily`, `setSystemAccent`                                                                    |
 
 `app/store.ts` combines the reducers and exports `RootState`/`AppDispatch`; `app/hooks.ts` exports `useAppSelector` and `useAppDispatch` created with `.withTypes(...)`, so selectors and thunks are fully typed. `App.tsx` has no local state — it reads values with selectors and dispatches actions. Child components remain presentational, receiving props from `App`.
 

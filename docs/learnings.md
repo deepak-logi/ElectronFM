@@ -364,6 +364,12 @@ Every stage type-checked on its own. The rule was: don't move the next piece of 
 
 The `readDir` call used to live in a `useEffect`. In Redux it became a `createAsyncThunk`: the payload creator calls `window.fileApi.readDir`, while `pending`/`fulfilled`/`rejected` reducers only change state. That keeps side effects out of reducers and makes `App.tsx` declarative — it just dispatches when `currentPath` or `showHidden` changes.
 
+### Ephemeral UI state can belong in Redux too
+
+`isCreatingFolder` is only a boolean controlling an inline input, so local `useState` would have worked. But `Toolbar` opens the input, `FileList` renders it and `App` coordinates the IPC call — three components need the same flag. Putting it in `filesSlice` alongside `items` and `error` keeps that coordination in one place and makes it visible in DevTools. The typed characters stay local to `NewFolderRow`: dispatching on every keystroke would be noise.
+
+The `createFolder` thunk follows the same pattern as `loadDirectory`. Its `fulfilled` action closes the row; `rejected` keeps it open so the user can fix the name. `App` re-dispatches `loadDirectory` after success rather than trying to splice a new row into `items` locally — there is only one source of truth for the directory listing.
+
 ### `requestId` replaces the `cancelled` flag
 
 `createAsyncThunk` gives every call a `requestId`. Storing it on `pending` and comparing it in `fulfilled`/`rejected` does exactly what the old cleanup flag did. I initially guarded only `filesSlice`; `navigationSlice` was still accepting stale `fulfilled` results and overwriting breadcrumbs from an older folder. Both slices now guard. The same idea caught a second bug: error banner state used to hide the file list entirely, so a failed file-open left the UI stuck. Clearing `items` on `pending` and rendering the list whenever `!loading` fixed it.

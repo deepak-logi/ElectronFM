@@ -25,15 +25,15 @@ A small desktop file manager built with Electron and React. It browses the local
 - Show/hide hidden files (dot-prefixed names) with a toolbar toggle.
 - Switch between the default palette and Catppuccin; the OS still decides light or dark (Latte / Mocha).
 - In the default palette, file selection and focus colours follow the macOS accent color live.
-- Right-click a file or folder for a native menu with Open, Reveal in file manager, and Copy path; the details panel also has a Reveal button.
+- Right-click a folder for a native menu with Open, New Folder Inside, Reveal in file manager, and Copy path; the toolbar has a New Folder button and the details panel has a Reveal button.
 - Clickable breadcrumb path; click any ancestor segment to jump back to it.
+- Create a folder with the toolbar button; Enter commits, Escape cancels.
 - Loading, error, and empty-folder states.
 
 **Not implemented (out of scope for this build)**
 
 - Search / filter
 - Sorting by name, size, or date
-- Create folder
 - Delete, rename, drag-and-drop, multiple tabs
 - Multi-select
 
@@ -114,7 +114,7 @@ file-manager/
 │           │   ├── store.ts  # configureStore + RootState/AppDispatch
 │           │   └── hooks.ts  # Typed useAppSelector / useAppDispatch
 │           ├── features/
-│           │   ├── filesSlice.ts       # Items, selection, loading, error, loadDirectory thunk
+│           │   ├── filesSlice.ts       # Items, selection, loading, error, creating-folder UI, thunks
 │           │   ├── navigationSlice.ts  # Path, parent, history, breadcrumbs
 │           │   └── settingsSlice.ts    # Hidden files, theme family, macOS accent
 │           ├── components/
@@ -178,15 +178,15 @@ Two details are worth knowing:
 
 Renderer state lives in three Redux Toolkit slices under `src/renderer/src/features/`:
 
-| Slice        | Owns                                                  |
-| ------------ | ----------------------------------------------------- |
-| `files`      | `items`, `selected`, `loading`, `error`, `requestId`  |
-| `navigation` | `currentPath`, `parentPath`, `history`, `breadcrumbs` |
-| `settings`   | `showHidden`, `themeFamily`, `systemAccent`           |
+| Slice        | Owns                                                                     |
+| ------------ | ------------------------------------------------------------------------ |
+| `files`      | `items`, `selected`, `loading`, `error`, `requestId`, `isCreatingFolder` |
+| `navigation` | `currentPath`, `parentPath`, `history`, `breadcrumbs`                    |
+| `settings`   | `showHidden`, `themeFamily`, `systemAccent`                              |
 
 `app/store.ts` combines them and exports `RootState`/`AppDispatch`; `app/hooks.ts` exports pre-typed `useAppSelector`/`useAppDispatch`. Components read what they need directly, so `App.tsx` has no `useState` left.
 
-`loadDirectory` is a `createAsyncThunk` that calls the typed `window.fileApi.readDir` bridge. Its `pending`/`fulfilled`/`rejected` actions drive loading and error state; `requestId` ensures a slower, older folder read cannot overwrite a newer one. The `navigation` slice reacts to the same thunk to store the parent path and breadcrumbs. DOM and `localStorage` side effects (theme attribute, accent custom property) stay in small `useEffect` hooks that read values from the store.
+`loadDirectory` is a `createAsyncThunk` that calls the typed `window.fileApi.readDir` bridge. Its `pending`/`fulfilled`/`rejected` actions drive loading and error state; `requestId` ensures a slower, older folder read cannot overwrite a newer one. `createFolder` is a second thunk calling `window.fileApi.createFolder`; its `fulfilled` action closes the inline input row and `App` then re-dispatches `loadDirectory`. The `navigation` slice reacts to `loadDirectory` to store the parent path and breadcrumbs. DOM and `localStorage` side effects (theme attribute, accent custom property) stay in small `useEffect` hooks that read values from the store.
 
 ## Styling
 
@@ -204,7 +204,7 @@ The full conventions and folder guide are in [`docs/styling.md`](docs/styling.md
 ## Security decisions
 
 - **Context isolation stays on** (Electron's default) and **Node integration stays off**, so renderer code cannot access Node or Electron internals directly.
-- The preload exposes **seven named functions** (`getHomeDir`, `readDir`, `openPath`, `getAccentColor`, `onAccentColorChanged`, `showItemInFolder`, `showContextMenu`) instead of exposing `ipcRenderer` itself. The native context menu is built in main, so `shell` and `clipboard` stay out of the renderer. All signatures are declared in `src/preload/index.d.ts`.
+- The preload exposes **nine named functions** (`getHomeDir`, `readDir`, `openPath`, `getAccentColor`, `onAccentColorChanged`, `showItemInFolder`, `showContextMenu`, `createFolder`, `onNewFolderRequested`) instead of exposing `ipcRenderer` itself. The native context menu is built in main, so `shell` and `clipboard` stay out of the renderer. All signatures are declared in `src/preload/index.d.ts`.
 - Both IPC handlers **validate input** before using a path: the argument is typed `unknown`, then narrowed to a string and checked with `path.isAbsolute`. `fs:readDir` rejects with `Invalid folder path`, `shell:openPath` with `Invalid file path`.
 - File system access uses **async `fs/promises`**, so the UI never freezes on slow folders.
 - The `remote` module is not used; all communication goes through `ipcMain.handle` / `ipcRenderer.invoke`.
@@ -240,7 +240,6 @@ Builds are currently **unsigned** and **not notarized**. Locally built apps run 
 
 - Search/filter in the current folder.
 - Sort by name, size, or date, plus a Name / Size / Modified header row.
-- Create folder.
 - Keyboard navigation and shortcuts.
 - Virtualized file list for huge folders.
 - Automated tests for the main-process handlers and React components.
